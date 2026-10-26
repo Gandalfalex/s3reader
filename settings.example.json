@@ -1,0 +1,32 @@
+{
+  "profiles": [
+    {
+      "name": "aws-prod",
+      "region": "eu-central-1",
+      "awsProfile": "prod"
+    },
+    {
+      "name": "aws-static-keys",
+      "region": "us-east-1",
+      "accessKeyId": "${AWS_ACCESS_KEY_ID}",
+      "secretAccessKey": "${AWS_SECRET_ACCESS_KEY}",
+      "bucket": "my-data-bucket",
+      "prefix": "exports/"
+    },
+    {
+      "name": "minio-local",
+      "endpoint": "http://localhost:9000",
+      "region": "us-east-1",
+      "accessKeyId": "minioadmin",
+      "secretAccessKey": "minioadmin",
+      "pathStyle": true
+    },
+    {
+      "name": "cloudflare-r2",
+      "endpoint": "https://<account-id>.r2.cloudflarestorage.com",
+      "region": "auto",
+      "accessKeyId": "${R2_KEY}",
+      "secretAccessKey": "${R2_SECRET}"
+    }
+  ]
+}
