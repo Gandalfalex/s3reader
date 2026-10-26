@@ -27,6 +27,14 @@
       "region": "auto",
       "accessKeyId": "${R2_KEY}",
       "secretAccessKey": "${R2_SECRET}"
+    },
+    {
+      "name": "on-prem-private-ca",
+      "endpoint": "https://s3.internal.example.com",
+      "region": "us-east-1",
+      "accessKeyId": "${ONPREM_KEY}",
+      "secretAccessKey": "${ONPREM_SECRET}",
+      "caBundle": "~/certs/corp-root-ca.pem"
     }
   ]
 }

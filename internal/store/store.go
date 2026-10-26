@@ -2,9 +2,14 @@
 package store
 
 import (
+	"bytes"
 	"context"
+	"crypto/tls"
+	"fmt"
 	"log/slog"
 	"net"
+	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -12,6 +17,7 @@ import (
 	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 
@@ -42,13 +48,33 @@ func NewClient(ctx context.Context, p config.Profile) (*s3.Client, error) {
 	httpClient := awshttp.NewBuildableClient().WithDialerOptions(func(d *net.Dialer) {
 		d.Timeout = 5 * time.Second
 	})
+	if p.Insecure {
+		httpClient = httpClient.WithTransportOptions(func(t *http.Transport) {
+			if t.TLSClientConfig == nil {
+				t.TLSClientConfig = &tls.Config{}
+			}
+			t.TLSClientConfig.InsecureSkipVerify = true
+		})
+	}
 	opts := []func(*awsconfig.LoadOptions) error{awsconfig.WithRegion(region), awsconfig.WithHTTPClient(httpClient)}
+	if p.CABundle != "" {
+		pem, err := os.ReadFile(p.CABundle)
+		if err != nil {
+			return nil, fmt.Errorf("caBundle: %w", err)
+		}
+		opts = append(opts, awsconfig.WithCustomCABundle(bytes.NewReader(pem)))
+	}
 	if p.AWSProfile != "" {
 		opts = append(opts, awsconfig.WithSharedConfigProfile(p.AWSProfile))
 	}
 	if p.AccessKeyID != "" {
 		opts = append(opts, awsconfig.WithCredentialsProvider(
 			credentials.NewStaticCredentialsProvider(p.AccessKeyID, p.SecretAccessKey, p.SessionToken)))
+	}
+	if p.Endpoint != "" {
+		// Non-AWS endpoints never have an EC2 metadata service; probing it
+		// just burns the timeout and hides the real "no credentials" cause.
+		opts = append(opts, awsconfig.WithEC2IMDSClientEnableState(imds.ClientDisabled))
 	}
 	if Debug {
 		// LogResponse logs status + headers only; request logging is left off
