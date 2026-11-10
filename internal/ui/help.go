@@ -22,7 +22,8 @@ const helpText = `
     l / enter / →       open profile, bucket, directory or object
     h / - / ← / bksp    go up a directory / back
     gr                  jump to bucket root
-    q                   quit (back, in pager views)
+    ctrl+o / ctrl+i     jump back / forward through visited dirs and buckets
+    q                   quit (press twice inside a dir; back, in pager views)
     ctrl+c              quit anywhere
     esc                 clear filter → cancel request → back
 
@@ -31,10 +32,10 @@ const helpText = `
     ? (or s)            recursive search from current dir
     D                   (search results) reveal object in its directory
     o / O               cycle sort (name, size, modified) / reverse
-    r                   reload
+    r                   reload (dir listings are cached for 5 min)
 
   INFO
-    i / gi              bucket info (versioning, encryption, policy, ...)
+    i / gi              bucket info (versioning, retention, encryption, ...)
     c                   (info) scan whole bucket: count, size, classes, ext
     C                   (info) scan only the current prefix
     y / Y               yank s3:// URI / raw key to clipboard

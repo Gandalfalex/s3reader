@@ -95,6 +95,7 @@ func (m *model) reload() (tea.Model, tea.Cmd) {
 		if e, ok := m.objects.current(); ok {
 			sel = e.Key
 		}
+		delete(m.dirs, m.here())
 		return m, m.loadDir(m.prefix, sel)
 	case scrSearch:
 		return m, m.startSearch(m.searchQuery)

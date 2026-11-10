@@ -69,6 +69,12 @@ type model struct {
 	compl        []complItem // ":" completion popup
 	complIdx     int         // selected completion, -1 = none
 	pendingStats *string     // scan this prefix once bucket info arrives
+	quitArmed    bool        // q pressed once outside the top level
+
+	dirs    dirCache
+	cursors map[dirKey]string // key under the cursor when a dir was left
+	jumps   []dirKey          // ctrl+o / ctrl+i
+	jumpIdx int
 
 	opStart time.Time
 	errs    []errEntry // newest last, capped at maxErrs
@@ -95,6 +101,7 @@ func newModel(s *config.Settings, logPath string) *model {
 		vp:       viewport.New(),
 		logPath:  logPath,
 	}
+	m.resetHistory()
 	m.profiles.noSort = true
 	var rows []store.Entry
 	for i, p := range s.Profiles {
@@ -152,6 +159,16 @@ func (m *model) newOp(what string) context.Context {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
 	return ctx
+}
+
+// cancelOp aborts the operation in flight, if any, and drops its result.
+func (m *model) cancelOp() {
+	if !m.loading {
+		return
+	}
+	m.cancel() // set by newOp whenever loading
+	m.done()
+	m.gen++
 }
 
 func (m *model) done() {

@@ -45,30 +45,42 @@ func (m *model) render() string {
 	return body + m.statusBar() + "\n" + m.hints()
 }
 
+// titleBar shows where we are; a path that does not fit is cut from the
+// left, since its deepest part is the one that matters.
 func (m *model) titleBar() string {
 	parts := []string{sTitle.Render("s3reader")}
 	if m.profile.Name != "" {
 		parts = append(parts, sCrumb.Render(m.profile.Name))
 	}
+	path := ""
 	switch m.top() {
-	case scrObjects, scrSearch, scrObject:
-		parts = append(parts, sCrumb.Render("s3://"+m.bucket+"/"+m.prefix))
+	case scrObjects, scrSearch:
+		path = "s3://" + m.bucket + "/" + m.prefix
+	case scrObject:
+		path = "s3://" + m.bucket + "/" + m.detail.Key
 	case scrInfo:
-		if m.info != nil {
-			parts = append(parts, sCrumb.Render("s3://"+m.info.Name), sMuted.Render("bucket info"))
-		}
+		path = "s3://" + m.info.Name
+	}
+	at := len(parts)
+	if path != "" {
+		parts = append(parts, sCrumb.Render(path))
+	}
+	switch m.top() {
+	case scrInfo:
+		parts = append(parts, sMuted.Render("bucket info"))
 	case scrHelp:
 		parts = append(parts, sMuted.Render("help"))
 	case scrErrors:
 		parts = append(parts, sErr.Render("error log"))
-	}
-	if m.top() == scrSearch {
+	case scrSearch:
 		parts = append(parts, sWarn.Render("search: "+m.searchQuery.Raw))
 	}
-	if m.top() == scrObject && m.detail != nil {
-		parts[len(parts)-1] = sCrumb.Render("s3://" + m.bucket + "/" + m.detail.Key)
+	sep := sMuted.Render(" › ")
+	s := strings.Join(parts, sep)
+	if over := lipgloss.Width(s) - m.w; over > 0 && path != "" {
+		parts[at] = sCrumb.Render(truncLeft(path, max(8, lipgloss.Width(path)-over)))
+		s = strings.Join(parts, sep)
 	}
-	s := strings.Join(parts, sMuted.Render(" › "))
 	return ansi.Truncate(s, m.w, "…")
 }
 
@@ -150,14 +162,13 @@ func (m *model) renderRow(e store.Entry, nameW int) string {
 		}
 		return pad(e.Name, 24) + sMuted.Render(pad(ep, 40)) + bucket
 	case scrBuckets:
-		return pad(e.Name, nameW) + sMuted.Render(fmtTime(e.Modified))
+		return pad(truncMid(e.Name, nameW), nameW) + sMuted.Render(fmtTime(e.Modified))
 	}
-	name := e.Name
+	name := truncMid(e.Name, nameW)
 	if e.IsDir {
-		name = sDir.Render(trunc(name, nameW))
-		return pad(name, nameW)
+		return pad(sDir.Render(name), nameW)
 	}
-	row := pad(trunc(name, nameW), nameW) + padLeft(humanSize(e.Size), 10) + " "
+	row := pad(name, nameW) + padLeft(humanSize(e.Size), 10) + " "
 	if nameW == m.w-2-11 {
 		return row
 	}
@@ -243,7 +254,7 @@ func (m *model) hints() string {
 	case scrBuckets:
 		h = "j/k move · l open · i info · / filter · o sort · y yank · r reload · : command · :help"
 	case scrObjects:
-		h = "j/k gg/G ^d/^u · l open · h up · / filter · ? search · i info · o/O sort · : command · :help"
+		h = "j/k gg/G ^d/^u · l open · h up · ^o/^i jump · / filter · ? search · i info · o/O sort · : command · :help"
 	case scrSearch:
 		h = "l details · D reveal in dir · / filter results · ? new search · h back · esc cancel"
 	case scrInfo:

@@ -24,9 +24,7 @@ func (m *model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	// esc cancels in-flight work first
 	if k == "esc" && m.loading && m.cancel != nil {
-		m.cancel()
-		m.done()
-		m.gen++
+		m.cancelOp()
 		m.keys.Reset()
 		m.setStatus("cancelled", false)
 		return m, nil
@@ -40,6 +38,9 @@ func (m *model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	ev, ok := m.keys.Feed(km, k)
 	if !ok {
 		return m, nil // count digit or pending g/z
+	}
+	if ev.Action != actQuit {
+		m.quitArmed = false
 	}
 	if ev.Seq == ":" {
 		return m, m.openCommandLine()

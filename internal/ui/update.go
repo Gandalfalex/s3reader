@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"s3reader/internal/query"
+	"s3reader/internal/store"
 )
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -54,6 +55,7 @@ func (m *model) update(msg tea.Msg) tea.Cmd {
 		}
 		slog.Info("connected", "profile", msg.profile.Name, "endpoint", msg.profile.Endpoint, "region", msg.client.Options().Region)
 		m.client, m.profile = msg.client, msg.profile
+		m.resetHistory()
 		if m.profile.Bucket != "" {
 			return m.openBucket(m.profile.Bucket, m.profile.Prefix)
 		}
@@ -77,6 +79,7 @@ func (m *model) update(msg tea.Msg) tea.Cmd {
 			m.fail("open bucket "+msg.bucket, msg.err)
 			return nil
 		}
+		m.dirs.put(dirKey{msg.bucket, msg.prefix}, msg.entries)
 		m.bucket, m.bucketRegion, m.bclient, m.prefix = msg.bucket, msg.region, msg.client, msg.prefix
 		m.bucketCreated = time.Time{}
 		for _, b := range m.buckets.all {
@@ -87,7 +90,7 @@ func (m *model) update(msg tea.Msg) tea.Cmd {
 		}
 		sortBy, rev := m.objects.sortBy, m.objects.reverse
 		m.objects = listState{sortBy: sortBy, reverse: rev}
-		m.objects.set(msg.entries)
+		m.showEntries(msg.entries, "")
 		m.push(scrObjects)
 		m.setStatus("", false)
 		return nil
@@ -98,17 +101,8 @@ func (m *model) update(msg tea.Msg) tea.Cmd {
 			m.fail("list s3://"+m.bucket+"/"+msg.prefix, msg.err)
 			return nil
 		}
-		if msg.prefix != m.prefix { // keep the filter on reload, drop it on cd
-			m.objects.filter = query.Query{}
-		}
-		m.prefix = msg.prefix
-		m.objects.Cursor, m.objects.Top = 0, 0
-		m.objects.set(msg.entries)
-		if msg.sel != "" {
-			m.objects.selectKey(msg.sel)
-		}
-		m.objects.Top = m.objects.Cursor - m.listHeight()/2
-		m.objects.scroll(m.listHeight())
+		m.dirs.put(dirKey{m.bucket, msg.prefix}, msg.entries)
+		m.applyDir(msg.prefix, msg.entries, msg.sel)
 		return nil
 
 	case searchMsg:
@@ -173,4 +167,27 @@ func (m *model) update(msg tea.Msg) tea.Cmd {
 		return cmd
 	}
 	return nil
+}
+
+func (m *model) applyDir(prefix string, entries []store.Entry, sel string) {
+	if prefix != m.prefix { // keep the filter on reload, drop it on cd
+		m.objects.filter = query.Query{}
+	}
+	m.prefix = prefix
+	m.showEntries(entries, sel)
+}
+
+// showEntries fills the object list with the cursor on sel, or where it was
+// when this dir was last left.
+func (m *model) showEntries(entries []store.Entry, sel string) {
+	if sel == "" {
+		sel = m.cursors[m.here()]
+	}
+	m.objects.Cursor, m.objects.Top = 0, 0
+	m.objects.set(entries)
+	if sel != "" {
+		m.objects.selectKey(sel)
+	}
+	m.objects.Top = m.objects.Cursor - m.listHeight()/2
+	m.objects.scroll(m.listHeight())
 }

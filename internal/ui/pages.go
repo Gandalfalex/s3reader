@@ -110,12 +110,34 @@ func (m *model) renderInfo() string {
 		pol = sErr.Render(pol)
 	}
 	b.WriteString(row("Bucket policy", pol))
-	if len(bi.Lifecycle) == 0 {
+
+	b.WriteString("\n" + sSection.Render(" RETENTION") + "\n")
+	lock := bi.ObjectLock
+	if lock == "Enabled" {
+		lock = sOK.Render(lock)
+	}
+	b.WriteString(row("Object Lock", lock))
+	if bi.Retention != "" {
+		b.WriteString(row("Default retention", bi.Retention))
+	}
+	switch {
+	case bi.LifecycleNote != "":
+		b.WriteString(row("Lifecycle", bi.LifecycleNote))
+	case len(bi.Lifecycle) == 0:
 		b.WriteString(row("Lifecycle", "none"))
-	} else {
+	default:
 		b.WriteString(row("Lifecycle", fmt.Sprintf("%d rule(s)", len(bi.Lifecycle))))
 		for _, r := range bi.Lifecycle {
-			b.WriteString(row("", sMuted.Render("• ")+r))
+			st := r.Status
+			if st == "Enabled" {
+				st = sOK.Render(st)
+			} else {
+				st = sMuted.Render(st)
+			}
+			b.WriteString(row("", sMuted.Render("• ")+r.ID+" ["+st+"]"+sMuted.Render("  "+r.Scope)))
+			for _, a := range r.Actions {
+				b.WriteString(row("", "    "+a))
+			}
 		}
 	}
 	if len(bi.Tags) > 0 {

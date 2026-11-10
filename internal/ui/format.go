@@ -32,7 +32,26 @@ func padLeft(s string, w int) string {
 	return strings.Repeat(" ", w-sw) + s
 }
 
-func trunc(s string, w int) string { return ansi.Truncate(s, w, "…") }
+// truncMid shortens s to w cells by cutting the middle, so the start and the
+// end (dates, extensions, trailing /) of a key stay visible.
+func truncMid(s string, w int) string {
+	sw := ansi.StringWidth(s)
+	if sw <= w {
+		return s
+	}
+	head := (w - 1) / 2
+	tail := w - 1 - head
+	return ansi.Truncate(s, head, "") + "…" + ansi.TruncateLeft(s, sw-tail, "")
+}
+
+// truncLeft keeps the last w cells of s, marking the cut with "…".
+func truncLeft(s string, w int) string {
+	sw := ansi.StringWidth(s)
+	if sw <= w {
+		return s
+	}
+	return "…" + ansi.TruncateLeft(s, sw-(w-1), "")
+}
 
 func fmtTime(t time.Time) string {
 	if t.IsZero() {

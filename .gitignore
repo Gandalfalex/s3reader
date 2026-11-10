@@ -1,0 +1,5 @@
+# local config, may contain credentials
+settings.json
+
+# build output
+/s3reader

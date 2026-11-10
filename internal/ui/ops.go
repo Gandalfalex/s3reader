@@ -35,6 +35,13 @@ func (m *model) loadBuckets() tea.Cmd {
 }
 
 func (m *model) openBucket(bucket, prefix string) tea.Cmd {
+	if m.bucket != "" && bucket != m.bucket {
+		m.leave(true)
+	}
+	return m.fetchBucket(bucket, prefix)
+}
+
+func (m *model) fetchBucket(bucket, prefix string) tea.Cmd {
 	ctx := m.newOp("opening " + bucket)
 	gen, c, p := m.gen, m.client, m.profile
 	return func() tea.Msg {
@@ -45,6 +52,22 @@ func (m *model) openBucket(bucket, prefix string) tea.Cmd {
 }
 
 func (m *model) loadDir(prefix, sel string) tea.Cmd {
+	if prefix != m.prefix {
+		m.leave(true)
+	}
+	return m.listDir(prefix, sel)
+}
+
+// listDir shows prefix, straight from the cache when it is fresh.
+func (m *model) listDir(prefix, sel string) tea.Cmd {
+	if e, ok := m.dirs.get(dirKey{m.bucket, prefix}); ok {
+		m.cancelOp()
+		m.applyDir(prefix, e.entries, sel)
+		if time.Since(e.at) > time.Minute {
+			m.setStatus("cached "+ago(e.at)+" · r reload", false)
+		}
+		return nil
+	}
 	ctx := m.newOp("listing s3://" + m.bucket + "/" + prefix)
 	gen, c, b := m.gen, m.bclient, m.bucket
 	return func() tea.Msg {

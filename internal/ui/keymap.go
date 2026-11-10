@@ -37,8 +37,6 @@ func cmd(fn func(*model) tea.Cmd) keyFn {
 	return func(m *model, _ keyCtx) (tea.Model, tea.Cmd) { return m, fn(m) }
 }
 
-func quit(m *model, _ keyCtx) (tea.Model, tea.Cmd) { return m, tea.Quit }
-
 // App actions; motions come from vimkit/motion.
 const (
 	actQuit        keys.Action = "quit"
@@ -58,6 +56,8 @@ const (
 	actReveal      keys.Action = "reveal"
 	actStats       keys.Action = "stats"
 	actStatsPrefix keys.Action = "stats_prefix"
+	actOlder       keys.Action = "jump_back"
+	actNewer       keys.Action = "jump_forward"
 )
 
 var listKeymap = keys.MustKeymap(motion.VerticalBindings(), keys.Bindings{
@@ -76,6 +76,8 @@ var listKeymap = keys.MustKeymap(motion.VerticalBindings(), keys.Bindings{
 	actYank:    {"y"},
 	actYankKey: {"Y"},
 	actReveal:  {"D"},
+	actOlder:   {"ctrl+o"},
+	actNewer:   {"ctrl+i", "tab"}, // most terminals send tab for ctrl+i
 })
 
 var pagerKeymap = keys.MustKeymap(pagerMotions(), keys.Bindings{
@@ -96,8 +98,20 @@ func pagerMotions() keys.Bindings {
 	return b
 }
 
+// quitList quits at the top level; deeper in a bucket q must be pressed twice
+// so a stray q does not lose your place.
+func quitList(m *model, _ keyCtx) (tea.Model, tea.Cmd) {
+	home := m.prefix == "" || (m.bucket == m.profile.Bucket && m.prefix == m.profile.Prefix)
+	if m.top() == scrProfiles || m.top() == scrBuckets || (m.top() == scrObjects && home) || m.quitArmed {
+		return m, tea.Quit
+	}
+	m.quitArmed = true
+	m.setStatus("press q again to quit (h goes back)", false)
+	return m, nil
+}
+
 var listActions = map[keys.Action]keyFn{
-	actQuit:   quit,
+	actQuit:   quitList,
 	actErrors: do(func(m *model, _ keyCtx) { m.openErrors() }),
 	actSearch: cmd((*model).openSearchInput),
 	actFilter: func(m *model, c keyCtx) (tea.Model, tea.Cmd) {
@@ -135,6 +149,8 @@ var listActions = map[keys.Action]keyFn{
 		return m, nil
 	},
 	actReload: nav((*model).reload),
+	actOlder:  func(m *model, _ keyCtx) (tea.Model, tea.Cmd) { return m, m.jump(-1) },
+	actNewer:  func(m *model, _ keyCtx) (tea.Model, tea.Cmd) { return m, m.jump(+1) },
 	actYank:   cmd((*model).cmdYank),
 	actYankKey: func(m *model, c keyCtx) (tea.Model, tea.Cmd) {
 		if e, ok := c.l.current(); ok {
