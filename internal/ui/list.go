@@ -142,12 +142,7 @@ func (l *listState) current() (store.Entry, bool) {
 }
 
 func (l *listState) selectKey(key string) {
-	for i, idx := range l.vis {
-		if l.all[idx].Key == key {
-			l.Cursor = i
-			return
-		}
-	}
+	l.Select(len(l.vis), func(i int) bool { return l.all[l.vis[i]].Key == key })
 }
 
 // scroll keeps the cursor visible with a small scrolloff.

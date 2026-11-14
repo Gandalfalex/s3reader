@@ -211,18 +211,18 @@ func (m *model) cmdYank() tea.Cmd {
 // commandNames lists commands for the help screen.
 func commandHelp() string {
 	cs := append([]command(nil), commands...)
-	sort.Slice(cs, func(i, j int) bool { return cs[i].name < cs[j].name })
+	sort.Slice(cs, func(i, j int) bool { return cs[i].Name < cs[j].Name })
 	var b strings.Builder
 	for _, c := range cs {
-		label := ":" + c.name
-		if c.args != "" {
-			label += " " + c.args
+		label := ":" + c.Name
+		if c.Args != "" {
+			label += " " + c.Args
 		}
 		alias := ""
-		if len(c.aliases) > 0 {
-			alias = " (:" + strings.Join(c.aliases, ", :") + ")"
+		if len(c.Aliases) > 0 {
+			alias = " (:" + strings.Join(c.Aliases, ", :") + ")"
 		}
-		b.WriteString("    " + pad(label, 26) + c.desc + alias + "\n")
+		b.WriteString("    " + pad(label, 26) + c.Desc + alias + "\n")
 	}
 	return b.String()
 }

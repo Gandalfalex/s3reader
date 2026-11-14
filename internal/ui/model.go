@@ -13,6 +13,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
+	"github.com/Gandalfalex/vim-kit/cmdline"
 	"github.com/Gandalfalex/vim-kit/keys"
 	"s3reader/internal/config"
 	"s3reader/internal/query"
@@ -64,12 +65,9 @@ type model struct {
 	status    string
 	statusErr bool
 
-	cmdHist      []string // ":" history
-	histIdx      int
-	compl        []complItem // ":" completion popup
-	complIdx     int         // selected completion, -1 = none
-	pendingStats *string     // scan this prefix once bucket info arrives
-	quitArmed    bool        // q pressed once outside the top level
+	cmd          cmdline.Line // ":" history and completion popup
+	pendingStats *string      // scan this prefix once bucket info arrives
+	quitArmed    bool         // q pressed once outside the top level
 
 	dirs    dirCache
 	cursors map[dirKey]string // key under the cursor when a dir was left

@@ -2,11 +2,12 @@ package ui
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/Gandalfalex/vim-kit/cmdline"
 )
 
 func (m *model) openCommandLine() tea.Cmd {
@@ -14,16 +15,14 @@ func (m *model) openCommandLine() tea.Cmd {
 	m.input.Prompt = ":"
 	m.input.Placeholder = "command  (tab: complete, ↑↓: history, :help)"
 	m.input.SetValue("")
-	m.histIdx = len(m.cmdHist)
-	m.compl = m.computeCompletions("")
-	m.complIdx = -1
+	m.cmd.Open(m.computeCompletions(""))
 	return m.input.Focus()
 }
 
 func (m *model) closeCommandLine() {
 	m.mode = inputNone
 	m.input.Blur()
-	m.compl, m.complIdx = nil, -1
+	m.cmd.Close()
 }
 
 func (m *model) handleCommandKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -37,9 +36,7 @@ func (m *model) handleCommandKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if line == "" {
 			return m, nil
 		}
-		if n := len(m.cmdHist); n == 0 || m.cmdHist[n-1] != line {
-			m.cmdHist = append(m.cmdHist, line)
-		}
+		m.cmd.Commit(line)
 		return m, m.execute(line)
 	case "tab", "ctrl+n":
 		m.cycleCompletion(1)
@@ -48,21 +45,15 @@ func (m *model) handleCommandKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.cycleCompletion(-1)
 		return m, nil
 	case "up", "down":
-		if len(m.cmdHist) == 0 {
-			return m, nil
-		}
+		dir := 1
 		if msg.String() == "up" {
-			m.histIdx = max(0, m.histIdx-1)
-		} else {
-			m.histIdx = min(len(m.cmdHist), m.histIdx+1)
+			dir = -1
 		}
-		val := ""
-		if m.histIdx < len(m.cmdHist) {
-			val = m.cmdHist[m.histIdx]
+		if val, ok := m.cmd.Recall(dir); ok {
+			m.input.SetValue(val)
+			m.input.CursorEnd()
+			m.cmd.SetItems(m.computeCompletions(val))
 		}
-		m.input.SetValue(val)
-		m.input.CursorEnd()
-		m.compl, m.complIdx = m.computeCompletions(val), -1
 		return m, nil
 	case "backspace":
 		if m.input.Value() == "" { // like vim: backspace on empty line leaves
@@ -72,23 +63,21 @@ func (m *model) handleCommandKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(msg)
-	m.compl, m.complIdx = m.computeCompletions(m.input.Value()), -1
+	m.cmd.SetItems(m.computeCompletions(m.input.Value()))
 	return m, cmd
 }
 
 func (m *model) cycleCompletion(dir int) {
-	if len(m.compl) == 0 {
-		return
+	if val, ok := m.cmd.Cycle(dir); ok {
+		m.input.SetValue(val)
+		m.input.CursorEnd()
 	}
-	n := len(m.compl)
-	m.complIdx = ((m.complIdx+dir)%n + n) % n
-	m.input.SetValue(m.compl[m.complIdx].value)
-	m.input.CursorEnd()
 }
 
 // renderPopup draws the completion menu, scrolled so the selection is visible.
 func (m *model) renderPopup() []string {
-	n := len(m.compl)
+	compl, complIdx := m.cmd.Items, m.cmd.Index
+	n := len(compl)
 	if n == 0 {
 		return nil
 	}
@@ -97,19 +86,19 @@ func (m *model) renderPopup() []string {
 		win-- // last row shows "… more"
 	}
 	start := 0
-	if m.complIdx >= win {
-		start = m.complIdx - win + 1
+	if complIdx >= win {
+		start = complIdx - win + 1
 	}
 	labelW := 0
-	for _, it := range m.compl {
-		labelW = max(labelW, ansi.StringWidth(it.label))
+	for _, it := range compl {
+		labelW = max(labelW, ansi.StringWidth(it.Label))
 	}
 	labelW = min(labelW+2, max(10, m.w/2))
 	var out []string
 	for i := start; i < start+win; i++ {
-		it := m.compl[i]
-		line := pad(" "+pad(it.label, labelW)+sMuted.Render(it.desc), m.w)
-		if i == m.complIdx {
+		it := compl[i]
+		line := pad(" "+pad(it.Label, labelW)+sMuted.Render(it.Desc), m.w)
+		if i == complIdx {
 			line = sSel.Render(ansi.Strip(line))
 		} else {
 			line = sBar.Render(line)
@@ -117,15 +106,14 @@ func (m *model) renderPopup() []string {
 		out = append(out, line)
 	}
 	if rest := n - start - win; n > maxPopup {
-		out = append(out, sBar.Render(pad(sMuted.Render(fmt.Sprintf(" %d/%d · %d more (tab to cycle)", max(m.complIdx+1, 0), n, rest)), m.w)))
+		out = append(out, sBar.Render(pad(sMuted.Render(fmt.Sprintf(" %d/%d · %d more (tab to cycle)", max(complIdx+1, 0), n, rest)), m.w)))
 	}
 	return out
 }
 
 func (m *model) execute(line string) tea.Cmd {
-	name, arg, _ := strings.Cut(line, " ")
-	arg = strings.TrimSpace(arg)
-	if n, err := strconv.Atoi(name); err == nil { // :42 jumps to line 42
+	name, arg := cmdline.Split(line)
+	if n, ok := cmdline.LineNumber(name); ok { // :42 jumps to line 42
 		if l := m.list(); l != nil {
 			l.Cursor = n - 1
 			l.clamp()
@@ -136,10 +124,10 @@ func (m *model) execute(line string) tea.Cmd {
 		}
 		return nil
 	}
-	c, err := resolveCommand(name)
+	c, err := commands.Resolve(name)
 	if err != nil {
 		m.setStatus(err.Error(), true)
 		return nil
 	}
-	return c.run(m, arg)
+	return c.Run(m, arg)
 }
