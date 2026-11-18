@@ -2,34 +2,27 @@ package ui
 
 import (
 	tea "charm.land/bubbletea/v2"
+	tk "github.com/Gandalfalex/tuikit"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"s3reader/internal/config"
 	"s3reader/internal/store"
 )
 
-// op tags async results with the generation of the operation that produced
-// them; Update drops results from superseded or cancelled operations.
-type op int
-
-func (o op) opGen() int { return int(o) }
-
-type opResult interface{ opGen() int }
-
 type (
 	clientMsg struct {
-		op
+		tk.Op
 		client  *s3.Client
 		profile config.Profile
 		err     error
 	}
 	bucketsMsg struct {
-		op
+		tk.Op
 		buckets []store.Entry
 		err     error
 	}
 	bucketOpenedMsg struct {
-		op
+		tk.Op
 		bucket  string
 		region  string
 		client  *s3.Client
@@ -38,14 +31,14 @@ type (
 		err     error
 	}
 	dirMsg struct {
-		op
+		tk.Op
 		prefix  string
 		entries []store.Entry
 		sel     string
 		err     error
 	}
 	searchMsg struct {
-		op
+		tk.Op
 		found   []store.Entry
 		scanned int64
 		done    bool
@@ -53,19 +46,18 @@ type (
 		ch      <-chan tea.Msg
 	}
 	infoMsg struct {
-		op
+		tk.Op
 		info store.BucketInfo
 	}
 	statsMsg struct {
-		op
+		tk.Op
 		stats *store.Stats
 		ch    <-chan tea.Msg
 	}
 	detailMsg struct {
-		op
+		tk.Op
 		detail store.ObjectDetail
 	}
-	statusMsg string
 )
 
 func waitFor(ch <-chan tea.Msg) tea.Cmd {

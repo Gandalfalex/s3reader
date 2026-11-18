@@ -1,30 +1,22 @@
 package ui
 
 import (
-	"context"
-	"log/slog"
+	tk "github.com/Gandalfalex/tuikit"
 	"strconv"
 	"time"
 
-	"charm.land/bubbles/v2/spinner"
-	"charm.land/bubbles/v2/textinput"
-	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	"github.com/Gandalfalex/vim-kit/cmdline"
-	"github.com/Gandalfalex/vim-kit/keys"
 	"s3reader/internal/config"
 	"s3reader/internal/query"
 	"s3reader/internal/store"
 )
 
 type model struct {
-	settings *config.Settings
-	w, h     int
+	tk.Shell[screen] // stack, status, error log, async ops, keys, size
 
-	stack []screen
+	settings *config.Settings
 
 	profiles listState
 	buckets  listState
@@ -39,20 +31,10 @@ type model struct {
 	bucketCreated time.Time
 	prefix        string
 
-	mode       inputMode
-	input      textinput.Model
+	prompt     tk.Prompt[inputMode]
 	prevFilter string
 
-	keys keys.Input // count prefix and pending g/z sequence
-
-	loading  bool
-	what     string
-	spin     spinner.Model
-	spinning bool // a spinner tick is in flight
-	gen      int
-	cancel   context.CancelFunc
-
-	vp     viewport.Model
+	vp     tk.Pager
 	info   *store.BucketInfo
 	stats  *store.Stats
 	detail *store.ObjectDetail
@@ -62,75 +44,51 @@ type model struct {
 	searchScanned int64
 	searchDone    bool
 
-	status    string
-	statusErr bool
-
-	cmd          cmdline.Line // ":" history and completion popup
-	pendingStats *string      // scan this prefix once bucket info arrives
-	quitArmed    bool         // q pressed once outside the top level
+	cmd          tk.CommandLine[*model] // ":" commands, history and completion
+	pendingStats *string                // scan this prefix once bucket info arrives
 
 	dirs    dirCache
 	cursors map[dirKey]string // key under the cursor when a dir was left
 	jumps   []dirKey          // ctrl+o / ctrl+i
 	jumpIdx int
 
-	opStart time.Time
-	errs    []errEntry // newest last, capped at maxErrs
 	logPath string
 }
 
-type errEntry struct {
-	at   time.Time
-	what string
-	err  error
-}
-
-const maxErrs = 200
-
 func newModel(s *config.Settings, logPath string) *model {
-	in := textinput.New()
-	in.Prompt = "/"
-	in.CharLimit = 512
-
 	m := &model{
+		Shell:    tk.NewShell(theme, scrProfiles),
 		settings: s,
-		input:    in,
-		spin:     spinner.New(spinner.WithSpinner(spinner.MiniDot), spinner.WithStyle(lipgloss.NewStyle().Foreground(cAccent))),
-		vp:       viewport.New(),
+		prompt:   tk.NewPrompt[inputMode](),
+		cmd:      tk.CommandLine[*model]{Commands: commands, Goto: gotoLine},
+		vp:       tk.NewPager(),
 		logPath:  logPath,
 	}
 	m.resetHistory()
-	m.profiles.noSort = true
+	m.prompt.Input.CharLimit = 512
+	m.profiles = unsortedList()
+	m.buckets, m.objects, m.search = sortedList(sortName, false), sortedList(sortName, false), sortedList(sortName, false)
 	var rows []store.Entry
 	for i, p := range s.Profiles {
 		rows = append(rows, store.Entry{Key: strconv.Itoa(i), Name: p.Name})
 	}
-	m.profiles.set(rows)
-	m.stack = []screen{scrProfiles}
+	m.profiles.Set(rows)
+	m.Brief = shortErr
 	return m
 }
 
 func (m *model) Init() tea.Cmd {
 	if len(m.settings.Profiles) == 1 {
-		cmd := m.selectProfile(0)
-		m.spinning = true
-		return tea.Batch(cmd, m.spin.Tick)
+		return tea.Batch(m.selectProfile(0), m.Ops.Tick())
 	}
 	return nil
 }
 
-func (m *model) top() screen { return m.stack[len(m.stack)-1] }
+func (m *model) list() *listState { return listOf(m, m.Stack.Top()) }
 
-func (m *model) push(s screen) { m.stack = append(m.stack, s) }
-
-func (m *model) pop() {
-	if len(m.stack) > 1 {
-		m.stack = m.stack[:len(m.stack)-1]
-	}
-}
-
-func (m *model) list() *listState {
-	switch m.top() {
+// listOf is the list screen s shows, nil for pages.
+func listOf(m *model, s screen) *listState {
+	switch s {
 	case scrProfiles:
 		return &m.profiles
 	case scrBuckets:
@@ -143,57 +101,18 @@ func (m *model) list() *listState {
 	return nil
 }
 
-func (m *model) listHeight() int { return max(1, m.h-4) } // title, column header, status, hints
-
-func (m *model) newOp(what string) context.Context {
-	if m.cancel != nil {
-		m.cancel()
-	}
-	m.gen++
-	m.loading = true
-	m.what = what
-	m.opStart = time.Now()
-	slog.Debug("op start", "op", what, "gen", m.gen)
-	ctx, cancel := context.WithCancel(context.Background())
-	m.cancel = cancel
-	return ctx
-}
+func (m *model) listHeight() int { return max(1, m.H-4) } // title, column header, status, hints
 
 // cancelOp aborts the operation in flight, if any, and drops its result.
-func (m *model) cancelOp() {
-	if !m.loading {
-		return
-	}
-	m.cancel() // set by newOp whenever loading
-	m.done()
-	m.gen++
-}
+func (m *model) cancelOp() bool { return m.Ops.Cancel() }
 
-func (m *model) done() {
-	if m.loading {
-		slog.Debug("op done", "op", m.what, "took", time.Since(m.opStart).Round(time.Millisecond))
-	}
-	m.loading = false
-	m.what = ""
-}
-
-func (m *model) setStatus(s string, isErr bool) {
-	m.status, m.statusErr = s, isErr
-}
-
-// fail records an operation error: status bar, error history (E) and log file.
+// fail records an operation error: status bar, error log (E) and log file.
 // User cancellations are not errors.
 func (m *model) fail(what string, err error) {
-	if err == nil || store.IsCancel(err) {
+	if store.IsCancel(err) {
 		return
 	}
-	slog.Error(what, "err", err, "profile", m.profile.Name, "bucket", m.bucket, "prefix", m.prefix)
-	m.errs = append(m.errs, errEntry{at: time.Now(), what: what, err: err})
-	if len(m.errs) > maxErrs {
-		m.errs = m.errs[len(m.errs)-maxErrs:]
-	}
-	m.setStatus(what+": "+shortErr(err)+"  (E: error log)", true)
-	if m.top() == scrErrors {
+	if m.Fail(what, err, "profile", m.profile.Name, "bucket", m.bucket, "prefix", m.prefix) && m.Stack.Top() == scrErrors {
 		m.refreshViewport()
 	}
 }

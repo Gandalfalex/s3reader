@@ -8,24 +8,13 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-func (m *model) resort(l *listState) {
-	key := ""
-	if e, ok := l.current(); ok {
-		key = e.Key
-	}
-	l.apply()
-	if key != "" {
-		l.selectKey(key)
-	}
-}
-
 func (m *model) open() (tea.Model, tea.Cmd) {
 	l := m.list()
-	e, ok := l.current()
+	e, ok := l.Current()
 	if !ok {
 		return m, nil
 	}
-	switch m.top() {
+	switch m.Stack.Top() {
 	case scrProfiles:
 		i, _ := strconv.Atoi(e.Key)
 		return m, m.selectProfile(i)
@@ -43,7 +32,7 @@ func (m *model) open() (tea.Model, tea.Cmd) {
 }
 
 func (m *model) back() (tea.Model, tea.Cmd) {
-	switch m.top() {
+	switch m.Stack.Top() {
 	case scrObjects:
 		if m.prefix != "" {
 			trimmed := strings.TrimSuffix(m.prefix, "/")
@@ -53,30 +42,30 @@ func (m *model) back() (tea.Model, tea.Cmd) {
 			}
 			return m, m.loadDir(parent, m.prefix)
 		}
-		if len(m.stack) == 1 {
-			m.setStatus("at bucket root", false)
+		if m.Stack.Len() == 1 {
+			m.SetStatus("at bucket root", false)
 			return m, nil
 		}
-		m.pop()
-		if m.top() == scrBuckets {
-			m.buckets.selectKey(m.bucket)
+		m.Stack.Pop()
+		if m.Stack.Top() == scrBuckets {
+			m.buckets.Select(m.bucket)
 		}
 	case scrBuckets:
-		if len(m.stack) > 1 {
-			m.pop()
+		if m.Stack.Len() > 1 {
+			m.Stack.Pop()
 		}
 	case scrSearch:
-		m.pop()
+		m.Stack.Pop()
 	default:
-		m.pop()
+		m.Stack.Pop()
 	}
 	return m, nil
 }
 
 func (m *model) openInfo() (tea.Model, tea.Cmd) {
-	switch m.top() {
+	switch m.Stack.Top() {
 	case scrBuckets:
-		if e, ok := m.buckets.current(); ok {
+		if e, ok := m.buckets.Current(); ok {
 			return m, m.loadInfo(e.Key, e.Modified)
 		}
 	case scrObjects, scrSearch:
@@ -86,13 +75,13 @@ func (m *model) openInfo() (tea.Model, tea.Cmd) {
 }
 
 func (m *model) reload() (tea.Model, tea.Cmd) {
-	switch m.top() {
+	switch m.Stack.Top() {
 	case scrBuckets:
-		m.pop()
+		m.Stack.Pop()
 		return m, m.loadBuckets()
 	case scrObjects:
 		sel := ""
-		if e, ok := m.objects.current(); ok {
+		if e, ok := m.objects.Current(); ok {
 			sel = e.Key
 		}
 		delete(m.dirs, m.here())
@@ -103,21 +92,9 @@ func (m *model) reload() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *model) popTo(s screen) bool {
-	for i := len(m.stack) - 1; i >= 0; i-- {
-		if m.stack[i] == s {
-			m.stack = m.stack[:i+1]
-			return true
-		}
-	}
-	return false
-}
-
 // popToList closes pager screens (info, object, help, errors).
 func (m *model) popToList() {
-	for len(m.stack) > 1 && m.list() == nil {
-		m.pop()
-	}
+	m.Stack.PopWhile(func(s screen) bool { return listOf(m, s) == nil })
 }
 
 // resolveDir turns a vim-ish path (.., /, a/b, /abs) into a prefix.

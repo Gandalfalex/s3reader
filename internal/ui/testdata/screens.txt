@@ -1,0 +1,196 @@
+== profiles
+ s3reader 
+  PROFILE                 ENDPOINT / REGION                       BUCKET
+▌ aws                     aws (eu-central-1)                      (all)                             
+  minio                   http://localhost:9000                   data
+~
+~
+~
+~
+~
+~
+~
+~
+ NORMAL  1/2                                                                                        
+ j/k move · l/enter select · / filter · : command · :help · q quit
+== buckets
+ s3reader 
+  BUCKET                                                                        CREATED
+▌ data                                                                          2024-05-01 12:00    
+  logs                                                                          2024-06-01 12:00
+~
+~
+~
+~
+~
+~
+~
+~
+ NORMAL  1/2 │ 2 buckets                                                                            
+ j/k move · l open · i info · / filter · o sort · y yank · r reload · : command · :help
+== buckets moved
+ s3reader 
+  BUCKET                                                                        CREATED
+  data                                                                          2024-05-01 12:00
+▌ logs                                                                          2024-06-01 12:00    
+~
+~
+~
+~
+~
+~
+~
+~
+ NORMAL  2/2                                                                                        
+ j/k move · l open · i info · / filter · o sort · y yank · r reload · : command · :help
+== objects
+ s3reader  › s3://logs/
+  NAME                                                         SIZE  MODIFIED         CLASS         
+▌ 2024/                                                                                             
+  a.json                                                       10 B  2024-05-04 12:00 STANDARD      
+  b.csv                                                     2.0 KiB  2024-05-01 12:00 STANDARD      
+  c.csv                                                     5.0 MiB  2024-05-02 12:00 GLACIER       
+~
+~
+~
+~
+~
+~
+ NORMAL  1/4 │ 5.0 MiB │ sort:name↑                                                                 
+ j/k gg/G ^d/^u · l open · h up · ^o/^i jump · / filter · ? search · i info · o/O sort · : command …
+== sorted by size
+ s3reader  › s3://logs/
+  NAME                                                         SIZE  MODIFIED         CLASS         
+▌ 2024/                                                                                             
+  a.json                                                       10 B  2024-05-04 12:00 STANDARD      
+  b.csv                                                     2.0 KiB  2024-05-01 12:00 STANDARD      
+  c.csv                                                     5.0 MiB  2024-05-02 12:00 GLACIER       
+~
+~
+~
+~
+~
+~
+ NORMAL  1/4 │ 5.0 MiB │ sort:size↑ │ sort: size                                                    
+ j/k gg/G ^d/^u · l open · h up · ^o/^i jump · / filter · ? search · i info · o/O sort · : command …
+== reversed
+ s3reader  › s3://logs/
+  NAME                                                         SIZE  MODIFIED         CLASS         
+▌ 2024/                                                                                             
+  c.csv                                                     5.0 MiB  2024-05-02 12:00 GLACIER       
+  b.csv                                                     2.0 KiB  2024-05-01 12:00 STANDARD      
+  a.json                                                       10 B  2024-05-04 12:00 STANDARD      
+~
+~
+~
+~
+~
+~
+ NORMAL  1/4 │ 5.0 MiB │ sort:size↓                                                                 
+ j/k gg/G ^d/^u · l open · h up · ^o/^i jump · / filter · ? search · i info · o/O sort · : command …
+== filtering
+ s3reader  › s3://logs/
+  NAME                                                         SIZE  MODIFIED         CLASS         
+▌ c.csv                                                     5.0 MiB  2024-05-02 12:00 GLACIER       
+  b.csv                                                     2.0 KiB  2024-05-01 12:00 STANDARD      
+~
+~
+~
+~
+~
+~
+~
+~
+ FILTER  /csv                                                                                       
+ j/k gg/G ^d/^u · l open · h up · ^o/^i jump · / filter · ? search · i info · o/O sort · : command …
+== filtered
+ s3reader  › s3://logs/
+  NAME                                                         SIZE  MODIFIED         CLASS         
+▌ c.csv                                                     5.0 MiB  2024-05-02 12:00 GLACIER       
+  b.csv                                                     2.0 KiB  2024-05-01 12:00 STANDARD      
+~
+~
+~
+~
+~
+~
+~
+~
+ NORMAL  1/2 │ (of 4) │ 5.0 MiB │ sort:size↓ │ /csv                                                 
+ j/k gg/G ^d/^u · l open · h up · ^o/^i jump · / filter · ? search · i info · o/O sort · : command …
+== filter cleared
+ s3reader  › s3://logs/
+  NAME                                                         SIZE  MODIFIED         CLASS         
+▌ 2024/                                                                                             
+  c.csv                                                     5.0 MiB  2024-05-02 12:00 GLACIER       
+  b.csv                                                     2.0 KiB  2024-05-01 12:00 STANDARD      
+  a.json                                                       10 B  2024-05-04 12:00 STANDARD      
+~
+~
+~
+~
+~
+~
+ NORMAL  1/4 │ 5.0 MiB │ sort:size↓                                                                 
+ j/k gg/G ^d/^u · l open · h up · ^o/^i jump · / filter · ? search · i info · o/O sort · : command …
+== command line
+ s3reader  › s3://logs/
+  NAME                                                         SIZE  MODIFIED         CLASS         
+▌ 2024/                                                                                             
+  c.csv                                                     5.0 MiB  2024-05-02 12:00 GLACIER       
+  b.csv                                                     2.0 KiB  2024-05-01 12:00 STANDARD      
+  a.json                                                       10 B  2024-05-04 12:00 STANDARD      
+~
+~
+~
+~
+~
+ help (h)  key bindings and query syntax                                                            
+ COMMAND  :he                                                                                       
+ tab/S-tab complete · ↑↓ history · enter run · esc cancel
+== error
+ s3reader  › s3://logs/
+  NAME                                                         SIZE  MODIFIED         CLASS         
+▌ 2024/                                                                                             
+  c.csv                                                     5.0 MiB  2024-05-02 12:00 GLACIER       
+  b.csv                                                     2.0 KiB  2024-05-01 12:00 STANDARD      
+  a.json                                                       10 B  2024-05-04 12:00 STANDARD      
+~
+~
+~
+~
+~
+~
+ NORMAL  1/4 │ 5.0 MiB │ sort:size↓ │ E:1 │ list s3://logs/2024/: access denied
+request id 123  (E: …                                                          
+ j/k gg/G ^d/^u · l open · h up · ^o/^i jump · / filter · ? search · i info · o/O sort · : command …
+== error log
+ s3reader  › error log
+                                                                                                    
+  hh:mm:ss  list s3://logs/2024/                                                                    
+    access denied                                                                                   
+request id 123                                                                                      
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+ NORMAL  100%                                                                                       
+ j/k scroll · G newest · q back · full log: /tmp/s3reader.log
+== q armed
+ s3reader  › s3://logs/
+  NAME                                                         SIZE  MODIFIED         CLASS         
+▌ 2024/                                                                                             
+  c.csv                                                     5.0 MiB  2024-05-02 12:00 GLACIER       
+  b.csv                                                     2.0 KiB  2024-05-01 12:00 STANDARD      
+  a.json                                                       10 B  2024-05-04 12:00 STANDARD      
+~
+~
+~
+~
+~
+~
+ NORMAL  1/4 │ 5.0 MiB │ sort:size↓ │ E:1                                                           
+ j/k gg/G ^d/^u · l open · h up · ^o/^i jump · / filter · ? search · i info · o/O sort · : command …

@@ -1,13 +1,13 @@
 package ui
 
 import (
+	tk "github.com/Gandalfalex/tuikit"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gandalfalex/vim-kit/keys"
 	"github.com/Gandalfalex/vim-kit/motion"
-	"s3reader/internal/query"
 )
 
 // keyCtx is what a key action needs besides the model: the key event with
@@ -80,7 +80,7 @@ var listKeymap = keys.MustKeymap(motion.VerticalBindings(), keys.Bindings{
 	actNewer:   {"ctrl+i", "tab"}, // most terminals send tab for ctrl+i
 })
 
-var pagerKeymap = keys.MustKeymap(pagerMotions(), keys.Bindings{
+var pagerKeymap = keys.MustKeymap(tk.PagerMotions(), keys.Bindings{
 	actBack:        {"q", "esc", "h", "left", "backspace", "-"},
 	actStats:       {"c"},
 	actStatsPrefix: {"C"},
@@ -90,24 +90,12 @@ var pagerKeymap = keys.MustKeymap(pagerMotions(), keys.Bindings{
 	actSearch:      {"?"},
 })
 
-// pagerMotions adds less-style keys to the vim defaults.
-func pagerMotions() keys.Bindings {
-	b := motion.VerticalBindings()
-	b[motion.Down] = append(b[motion.Down], "enter")
-	b[motion.PageDown] = append(b[motion.PageDown], "space")
-	return b
-}
-
 // quitList quits at the top level; deeper in a bucket q must be pressed twice
 // so a stray q does not lose your place.
 func quitList(m *model, _ keyCtx) (tea.Model, tea.Cmd) {
 	home := m.prefix == "" || (m.bucket == m.profile.Bucket && m.prefix == m.profile.Prefix)
-	if m.top() == scrProfiles || m.top() == scrBuckets || (m.top() == scrObjects && home) || m.quitArmed {
-		return m, tea.Quit
-	}
-	m.quitArmed = true
-	m.setStatus("press q again to quit (h goes back)", false)
-	return m, nil
+	top := m.Stack.Top()
+	return m, m.Quit(top == scrProfiles || top == scrBuckets || (top == scrObjects && home))
 }
 
 var listActions = map[keys.Action]keyFn{
@@ -115,35 +103,30 @@ var listActions = map[keys.Action]keyFn{
 	actErrors: do(func(m *model, _ keyCtx) { m.openErrors() }),
 	actSearch: cmd((*model).openSearchInput),
 	actFilter: func(m *model, c keyCtx) (tea.Model, tea.Cmd) {
-		m.mode = inputFilter
-		m.prevFilter = c.l.filter.Raw
-		m.input.Prompt = "/"
-		m.input.Placeholder = "filter: text !exclude re:regex ext:csv >1MB 2024-05 >2024-01 <7d class:glacier type:dir"
-		m.input.SetValue(c.l.filter.Raw)
-		m.input.CursorEnd()
-		return m, m.input.Focus()
+		m.prevFilter = c.l.Filter
+		return m, m.prompt.Open(inputFilter, tk.ModeFilter, "/", "filter: text !exclude re:regex ext:csv >1MB 2024-05 >2024-01 <7d class:glacier type:dir", c.l.Filter)
 	},
 	actEsc: func(m *model, c keyCtx) (tea.Model, tea.Cmd) {
-		if !c.l.filter.Empty() {
-			c.l.setFilter(query.Query{})
+		if c.l.Filter != "" {
+			c.l.SetFilter("")
 			return m, nil
 		}
 		return m.back()
 	},
 	actSort: do(func(m *model, c keyCtx) {
-		c.l.sortBy = (c.l.sortBy + 1) % len(sortNames)
-		m.resort(c.l)
-		m.setStatus("sort: "+sortNames[c.l.sortBy], false)
+		c.l.order((c.l.sortBy+1)%len(sortNames), c.l.reverse)
+		c.l.Resort()
+		m.SetStatus("sort: "+sortNames[c.l.sortBy], false)
 	}),
 	actReverse: do(func(m *model, c keyCtx) {
-		c.l.reverse = !c.l.reverse
-		m.resort(c.l)
+		c.l.order(c.l.sortBy, !c.l.reverse)
+		c.l.Resort()
 	}),
 	actOpen: nav((*model).open),
 	actBack: nav((*model).back),
 	actInfo: nav((*model).openInfo),
 	actRoot: func(m *model, _ keyCtx) (tea.Model, tea.Cmd) {
-		if m.top() == scrObjects && m.prefix != "" {
+		if m.Stack.Top() == scrObjects && m.prefix != "" {
 			return m, m.loadDir("", "")
 		}
 		return m, nil
@@ -153,17 +136,17 @@ var listActions = map[keys.Action]keyFn{
 	actNewer:  func(m *model, _ keyCtx) (tea.Model, tea.Cmd) { return m, m.jump(+1) },
 	actYank:   cmd((*model).cmdYank),
 	actYankKey: func(m *model, c keyCtx) (tea.Model, tea.Cmd) {
-		if e, ok := c.l.current(); ok {
-			return m, yank(e.Key)
+		if e, ok := c.l.Current(); ok {
+			return m, tk.YankValue(e.Key)
 		}
 		return m, nil
 	},
 	actReveal: func(m *model, c keyCtx) (tea.Model, tea.Cmd) {
 		// reveal search result in its directory
-		if m.top() == scrSearch {
-			if e, ok := c.l.current(); ok {
+		if m.Stack.Top() == scrSearch {
+			if e, ok := c.l.Current(); ok {
 				dir := e.Key[:strings.LastIndex(e.Key, "/")+1]
-				m.pop()
+				m.Stack.Pop()
 				return m, m.loadDir(dir, e.Key)
 			}
 		}
@@ -172,29 +155,29 @@ var listActions = map[keys.Action]keyFn{
 }
 
 var pagerActions = map[keys.Action]keyFn{
-	actBack: do(func(m *model, _ keyCtx) { m.pop() }),
+	actBack: do(func(m *model, _ keyCtx) { m.Stack.Pop() }),
 	actStats: func(m *model, _ keyCtx) (tea.Model, tea.Cmd) {
-		if m.top() == scrInfo && m.info != nil {
+		if m.Stack.Top() == scrInfo && m.info != nil {
 			return m, m.scanStats("")
 		}
 		return m, nil
 	},
 	actStatsPrefix: func(m *model, _ keyCtx) (tea.Model, tea.Cmd) {
-		if m.top() == scrInfo && m.info != nil && m.info.Name == m.bucket && m.prefix != "" {
+		if m.Stack.Top() == scrInfo && m.info != nil && m.info.Name == m.bucket && m.prefix != "" {
 			return m, m.scanStats(m.prefix)
 		}
 		return m, nil
 	},
 	actYank: cmd((*model).cmdYank),
 	actReload: func(m *model, _ keyCtx) (tea.Model, tea.Cmd) {
-		if m.top() == scrObject && m.detail != nil {
-			m.pop()
+		if m.Stack.Top() == scrObject && m.detail != nil {
+			m.Stack.Pop()
 			return m, m.loadDetail(m.detail.Key)
 		}
 		return m, nil
 	},
 	actErrors: do(func(m *model, _ keyCtx) {
-		if m.top() != scrErrors {
+		if m.Stack.Top() != scrErrors {
 			m.openErrors()
 		}
 	}),

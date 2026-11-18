@@ -1,24 +1,18 @@
 package ui
 
-import "sync"
+import (
+	"sync"
+
+	tk "github.com/Gandalfalex/tuikit"
+)
 
 // helpPage is built once: static key help plus the generated command list.
 var helpPage = sync.OnceValue(func() string {
-	return helpText + "\n  COMMANDS (:, tab completes, ↑↓ history, unique prefixes work: :buc, :prof)\n" +
-		commandHelp() + "    :42                       jump to line 42\n"
+	return "\n" + tk.MotionHelp + "\n" + helpText + "\n  COMMANDS (:, tab completes, ↑↓ history, unique prefixes work: :buc, :prof)\n" +
+		tk.CommandHelp(commands) + "    :42                       jump to line 42\n"
 })
 
-const helpText = `
-  MOTIONS (all accept a count, e.g. 5j, 10G)
-    j / k  ↓ / ↑        move down / up
-    gg / G              first / last  (3gg, 42G jump to line)
-    ctrl+d / ctrl+u     half page down / up
-    ctrl+f / ctrl+b     full page down / up
-    ctrl+e / ctrl+y     scroll view without moving (lists)
-    H / M / L           top / middle / bottom of screen
-    zz / zt / zb        center / top / bottom cursor line
-
-  NAVIGATION
+const helpText = `  NAVIGATION
     l / enter / →       open profile, bucket, directory or object
     h / - / ← / bksp    go up a directory / back
     gr                  jump to bucket root

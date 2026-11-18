@@ -4,54 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"strconv"
-	"strings"
 	"time"
 
-	"charm.land/lipgloss/v2"
 	"github.com/aws/smithy-go"
-	"github.com/charmbracelet/x/ansi"
 )
-
-func pad(s string, w int) string {
-	if w <= 0 {
-		return ""
-	}
-	sw := lipgloss.Width(s)
-	if sw > w {
-		return ansi.Truncate(s, w, "…")
-	}
-	return s + strings.Repeat(" ", w-sw)
-}
-
-func padLeft(s string, w int) string {
-	sw := lipgloss.Width(s)
-	if sw >= w {
-		return s
-	}
-	return strings.Repeat(" ", w-sw) + s
-}
-
-// truncMid shortens s to w cells by cutting the middle, so the start and the
-// end (dates, extensions, trailing /) of a key stay visible.
-func truncMid(s string, w int) string {
-	sw := ansi.StringWidth(s)
-	if sw <= w {
-		return s
-	}
-	head := (w - 1) / 2
-	tail := w - 1 - head
-	return ansi.Truncate(s, head, "") + "…" + ansi.TruncateLeft(s, sw-tail, "")
-}
-
-// truncLeft keeps the last w cells of s, marking the cut with "…".
-func truncLeft(s string, w int) string {
-	sw := ansi.StringWidth(s)
-	if sw <= w {
-		return s
-	}
-	return "…" + ansi.TruncateLeft(s, sw-(w-1), "")
-}
 
 func fmtTime(t time.Time) string {
 	if t.IsZero() {
@@ -77,25 +33,6 @@ func ago(t time.Time) string {
 	return fmt.Sprintf("%dy ago", int(d.Hours()/24/365))
 }
 
-func fmtInt(n int64) string {
-	s := strconv.FormatInt(n, 10)
-	if len(s) <= 3 {
-		return s
-	}
-	var b strings.Builder
-	pre := len(s) % 3
-	if pre > 0 {
-		b.WriteString(s[:pre])
-	}
-	for i := pre; i < len(s); i += 3 {
-		if b.Len() > 0 {
-			b.WriteByte(',')
-		}
-		b.WriteString(s[i : i+3])
-	}
-	return b.String()
-}
-
 // shortErr condenses AWS SDK errors ("operation error S3: ..., https response
 // error StatusCode: 403, RequestID: ..., api error AccessDenied: ...") for the
 // status bar. The full text goes to the log and the error screen.
@@ -112,17 +49,4 @@ func shortErr(err error) string {
 		return ne.Error() // e.g. "dial tcp 10.0.0.1:9000: i/o timeout"
 	}
 	return err.Error()
-}
-
-func humanSize(n int64) string {
-	const unit = 1024
-	if n < unit {
-		return fmt.Sprintf("%d B", n)
-	}
-	div, exp := int64(unit), 0
-	for m := n / unit; m >= unit; m /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTPE"[exp])
 }

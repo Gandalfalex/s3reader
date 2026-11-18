@@ -14,24 +14,31 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 
 	"s3reader/internal/store"
+
+	tk "github.com/Gandalfalex/tuikit"
 )
 
 // refreshViewport rebuilds content for pager screens.
 func (m *model) refreshViewport() {
-	switch m.top() {
+	content, wrap := m.pageContent()
+	m.vp.VP.SoftWrap = wrap
+	m.vp.Refresh(content)
+}
+
+// pageContent is the text of the pager screen on top, and whether it is
+// soft-wrapped.
+func (m *model) pageContent() (string, bool) {
+	switch m.Stack.Top() {
 	case scrInfo:
-		m.vp.SoftWrap = false
-		m.vp.SetContent(m.renderInfo())
+		return m.renderInfo(), false
 	case scrObject:
-		m.vp.SoftWrap = true
-		m.vp.SetContent(m.renderDetail())
+		return m.renderDetail(), true
 	case scrHelp:
-		m.vp.SoftWrap = false
-		m.vp.SetContent(helpPage())
+		return helpPage(), false
 	case scrErrors:
-		m.vp.SoftWrap = true
-		m.vp.SetContent(m.renderErrors())
+		return m.Errors.Render(theme), true
 	}
+	return "", false
 }
 
 func (m *model) openErrors() {
@@ -40,13 +47,9 @@ func (m *model) openErrors() {
 
 // openPage pushes a pager screen and renders its content.
 func (m *model) openPage(s screen, atBottom bool) {
-	m.push(s)
-	m.refreshViewport()
-	if atBottom {
-		m.vp.GotoBottom()
-	} else {
-		m.vp.GotoTop()
-	}
+	m.Stack.Push(s)
+	content, wrap := m.pageContent()
+	m.vp.Show(content, wrap, atBottom)
 }
 
 // scanStats starts an object scan for the bucket shown in the info page.
@@ -54,19 +57,6 @@ func (m *model) scanStats(prefix string) tea.Cmd {
 	cmd := m.startStats(m.info.Name, prefix)
 	m.refreshViewport()
 	return cmd
-}
-
-func (m *model) renderErrors() string {
-	if len(m.errs) == 0 {
-		return "\n" + sMuted.Render("  no errors this session") + "\n"
-	}
-	var b strings.Builder
-	b.WriteString("\n")
-	for _, e := range m.errs {
-		b.WriteString("  " + sMuted.Render(e.at.Format("15:04:05")) + "  " + sWarn.Render(e.what) + "\n")
-		b.WriteString("    " + sErr.Render(e.err.Error()) + "\n\n")
-	}
-	return b.String()
 }
 
 func row(label, value string) string {
@@ -157,7 +147,7 @@ func (m *model) renderInfo() string {
 		return b.String()
 	}
 	scope := "s3://" + bi.Name + "/" + st.Prefix
-	state := m.spin.View() + " scanning…"
+	state := m.Ops.Frame() + " scanning…"
 	if st.Done {
 		state = sOK.Render("✓ complete") + sMuted.Render(fmt.Sprintf(" in %s", st.Finished.Sub(st.Started).Round(time.Millisecond)))
 		if st.Err != nil {
@@ -166,11 +156,11 @@ func (m *model) renderInfo() string {
 	}
 	b.WriteString(row("Scope", scope))
 	b.WriteString(row("Status", state))
-	b.WriteString(row("Objects", fmtInt(st.Count)))
-	b.WriteString(row("Total size", fmt.Sprintf("%s  %s", humanSize(st.Size), sMuted.Render("("+fmtInt(st.Size)+" bytes)"))))
+	b.WriteString(row("Objects", tk.FmtInt(st.Count)))
+	b.WriteString(row("Total size", fmt.Sprintf("%s  %s", tk.FmtSize(st.Size), sMuted.Render("("+tk.FmtInt(st.Size)+" bytes)"))))
 	if st.Count > 0 {
-		b.WriteString(row("Average size", humanSize(st.Size/st.Count)))
-		b.WriteString(row("Largest", humanSize(st.Largest.Size)+"  "+sMuted.Render(st.Largest.Key)))
+		b.WriteString(row("Average size", tk.FmtSize(st.Size/st.Count)))
+		b.WriteString(row("Largest", tk.FmtSize(st.Largest.Size)+"  "+sMuted.Render(st.Largest.Key)))
 		b.WriteString(row("Newest", fmtTime(st.Newest.Modified)+"  "+sMuted.Render(st.Newest.Key)))
 		b.WriteString(row("Oldest", fmtTime(st.Oldest.Modified)+"  "+sMuted.Render(st.Oldest.Key)))
 
@@ -194,7 +184,7 @@ func statLine(v [2]int64, total int64) string {
 	barW := 20
 	filled := int(pct / 100 * float64(barW))
 	bar := sOK.Render(strings.Repeat("█", filled)) + sMuted.Render(strings.Repeat("░", barW-filled))
-	return fmt.Sprintf("%s %5.1f%%  %10s  %s objects", bar, pct, humanSize(v[1]), fmtInt(v[0]))
+	return fmt.Sprintf("%s %5.1f%%  %10s  %s objects", bar, pct, tk.FmtSize(v[1]), tk.FmtInt(v[0]))
 }
 
 func (m *model) renderDetail() string {
@@ -208,7 +198,7 @@ func (m *model) renderDetail() string {
 	b.WriteString(row("Key", d.Key))
 	b.WriteString(row("URI", "s3://"+m.bucket+"/"+d.Key))
 	size := aws.ToInt64(h.ContentLength)
-	b.WriteString(row("Size", fmt.Sprintf("%s  %s", humanSize(size), sMuted.Render("("+fmtInt(size)+" bytes)"))))
+	b.WriteString(row("Size", fmt.Sprintf("%s  %s", tk.FmtSize(size), sMuted.Render("("+tk.FmtInt(size)+" bytes)"))))
 	if h.LastModified != nil {
 		b.WriteString(row("Last modified", fmtTime(*h.LastModified)+sMuted.Render("  ("+ago(*h.LastModified)+")")))
 	}
@@ -270,11 +260,11 @@ func (m *model) renderDetail() string {
 	case len(d.Preview) == 0:
 		b.WriteString(sMuted.Render("  (empty)") + "\n")
 	case isText(d.Preview):
-		b.WriteString(sMuted.Render(strings.Repeat("─", max(0, m.w-1))) + "\n")
+		b.WriteString(sMuted.Render(strings.Repeat("─", max(0, m.W-1))) + "\n")
 		b.WriteString(sanitize(string(d.Preview)))
 		b.WriteString("\n")
 		if size > int64(len(d.Preview)) {
-			b.WriteString(sMuted.Render(fmt.Sprintf("── truncated: showing first %s of %s ──", humanSize(int64(len(d.Preview))), humanSize(size))) + "\n")
+			b.WriteString(sMuted.Render(fmt.Sprintf("── truncated: showing first %s of %s ──", tk.FmtSize(int64(len(d.Preview))), tk.FmtSize(size))) + "\n")
 		}
 	default:
 		n := min(len(d.Preview), 4096)

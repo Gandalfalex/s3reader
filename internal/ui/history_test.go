@@ -1,6 +1,7 @@
 package ui
 
 import (
+	tk "github.com/Gandalfalex/tuikit"
 	"slices"
 	"testing"
 
@@ -10,9 +11,10 @@ import (
 )
 
 func cachedModel(dirs map[string][]string) *model {
-	m := &model{bclient: &s3.Client{}, bucket: "b", h: 20, w: 80}
+	m := &model{Shell: tk.NewShell(theme, scrProfiles), bclient: &s3.Client{}, bucket: "b", objects: sortedList(sortName, false)}
+	m.W, m.H = 80, 20
 	m.resetHistory()
-	m.stack = []screen{scrProfiles, scrObjects}
+	m.Stack.Push(scrObjects)
 	for prefix, names := range dirs {
 		var es []store.Entry
 		for _, n := range names {
@@ -72,7 +74,7 @@ func TestDirRemembersCursor(t *testing.T) {
 	m.objects.Cursor = 2
 	m.loadDir("", "a/")
 	m.loadDir("a/", "")
-	if e, _ := m.objects.current(); e.Key != "a/3" {
+	if e, _ := m.objects.Current(); e.Key != "a/3" {
 		t.Fatalf("cursor on %q, want a/3", e.Key)
 	}
 }
@@ -87,25 +89,5 @@ func TestJumpBackTwiceBeforeLoad(t *testing.T) {
 	want := []dirKey{{"b", ""}, {"b", "a/"}, {"b", "a/b/"}}
 	if !slices.Equal(m.jumps, want) {
 		t.Fatalf("jumps = %v, want %v", m.jumps, want)
-	}
-}
-
-func TestTrunc(t *testing.T) {
-	cases := []struct {
-		fn   func(string, int) string
-		in   string
-		w    int
-		want string
-	}{
-		{truncMid, "short", 10, "short"},
-		{truncMid, "export-2024-05-17.parquet", 13, "export…arquet"},
-		{truncMid, "abcdef", 1, "…"},
-		{truncLeft, "s3://bucket/a/b/c/", 10, "…et/a/b/c/"},
-		{truncLeft, "short", 10, "short"},
-	}
-	for _, c := range cases {
-		if got := c.fn(c.in, c.w); got != c.want {
-			t.Errorf("trunc(%q, %d) = %q, want %q", c.in, c.w, got, c.want)
-		}
 	}
 }

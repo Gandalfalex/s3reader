@@ -5,6 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	tk "github.com/Gandalfalex/tuikit"
 	"github.com/Gandalfalex/vim-kit/cmdline"
 )
 
@@ -99,7 +100,7 @@ func completeDirs(m *model, arg string) []complItem {
 	// complete one level below what is typed, using the loaded listing for the
 	// current directory only
 	if !strings.Contains(strings.TrimSuffix(arg, "/"), "/") {
-		for _, e := range m.objects.all {
+		for _, e := range m.objects.All {
 			if e.IsDir {
 				items = append(items, complItem{Value: e.Name, Label: e.Name, Desc: "dir"})
 			}
@@ -110,8 +111,8 @@ func completeDirs(m *model, arg string) []complItem {
 
 func completeEntries(m *model, arg string) []complItem {
 	var items []complItem
-	for _, e := range m.objects.all {
-		desc := humanSize(e.Size) + "  " + fmtTime(e.Modified)
+	for _, e := range m.objects.All {
+		desc := tk.FmtSize(e.Size) + "  " + fmtTime(e.Modified)
 		if e.IsDir {
 			desc = "dir"
 		}
@@ -122,7 +123,7 @@ func completeEntries(m *model, arg string) []complItem {
 
 func completeBuckets(m *model, arg string) []complItem {
 	var items []complItem
-	for _, b := range m.buckets.all {
+	for _, b := range m.buckets.All {
 		items = append(items, complItem{Value: b.Name, Label: b.Name, Desc: "created " + fmtTime(b.Modified)})
 	}
 	if m.bucket != "" && len(items) == 0 {
@@ -141,9 +142,4 @@ func completeProfiles(m *model, arg string) []complItem {
 		items = append(items, complItem{Value: p.Name, Label: p.Name, Desc: desc})
 	}
 	return matchItems(items, arg)
-}
-
-// computeCompletions builds the popup for the current command-line text.
-func (m *model) computeCompletions(input string) []complItem {
-	return commands.Complete(m, input)
 }

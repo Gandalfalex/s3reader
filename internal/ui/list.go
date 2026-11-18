@@ -2,11 +2,10 @@ package ui
 
 import (
 	"cmp"
-	"slices"
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/Gandalfalex/vim-kit/motion"
+	tk "github.com/Gandalfalex/tuikit"
 	"s3reader/internal/query"
 	"s3reader/internal/store"
 )
@@ -19,83 +18,50 @@ const (
 
 var sortNames = []string{"name", "size", "modified"}
 
+// listState is a list of entries filtered with the query language of /.
 type listState struct {
-	all []store.Entry
-	vis []int
-	motion.Window
-	filter  query.Query
+	tk.List[store.Entry]
 	sortBy  int
 	reverse bool
-	noSort  bool // keep insertion order (profiles)
 }
 
-func (l *listState) set(items []store.Entry) {
-	l.all = items
-	l.apply()
-}
-
-// apply re-sorts and re-filters; use refilter when only the filter changed.
-func (l *listState) apply() {
-	if !l.noSort {
-		slices.SortStableFunc(l.all, l.compare)
-	}
-	l.refilter()
-}
-
-// setFilter replaces the filter and moves the cursor to the first match.
-func (l *listState) setFilter(q query.Query) {
-	l.filter = q
-	l.Cursor, l.Top = 0, 0
-	l.refilter()
-}
-
-func (l *listState) refilter() {
-	l.vis = l.vis[:0]
-	all := l.filter.Empty()
-	for i, e := range l.all {
-		if all || l.filter.Match(e) {
-			l.vis = append(l.vis, i)
+// unsortedList keeps the entries in the order given (profiles).
+func unsortedList() listState {
+	l := listState{List: tk.NewList(func(e store.Entry) string { return e.Key })}
+	l.Match = func(f string) func(store.Entry) bool {
+		q, err := query.Parse(f)
+		if err != nil {
+			return func(store.Entry) bool { return false }
 		}
+		return q.Match
 	}
-	l.clamp()
+	return l
 }
 
-// appendSorted merges a batch into the already sorted list in O(n), keeping
-// the cursor on the same entry. Used for streamed search results.
-func (l *listState) appendSorted(items []store.Entry) {
-	if len(items) == 0 {
+// sortedList orders its entries by a sort field.
+func sortedList(by int, reverse bool) listState {
+	l := unsortedList()
+	l.order(by, reverse)
+	return l
+}
+
+// order sets the sort field and direction; Resort applies it.
+func (l *listState) order(by int, reverse bool) {
+	l.sortBy, l.reverse = by, reverse
+	l.Compare = func(a, b store.Entry) int { return compare(by, reverse, a, b) }
+}
+
+// setQuery filters by a parsed query.
+func (l *listState) setQuery(q query.Query) {
+	if q.Empty() {
+		l.SetFilter("")
 		return
 	}
-	key := ""
-	if e, ok := l.current(); ok {
-		key = e.Key
-	}
-	if l.noSort {
-		l.all = append(l.all, items...)
-	} else {
-		slices.SortStableFunc(items, l.compare)
-		merged := make([]store.Entry, 0, len(l.all)+len(items))
-		i, j := 0, 0
-		for i < len(l.all) && j < len(items) {
-			if l.compare(items[j], l.all[i]) < 0 {
-				merged = append(merged, items[j])
-				j++
-			} else {
-				merged = append(merged, l.all[i])
-				i++
-			}
-		}
-		merged = append(append(merged, l.all[i:]...), items[j:]...)
-		l.all = merged
-	}
-	l.refilter()
-	if key != "" {
-		l.selectKey(key)
-	}
+	l.SetFilter(q.Raw)
 }
 
 // compare orders directories first, then by the sort field.
-func (l *listState) compare(a, b store.Entry) int {
+func compare(by int, reverse bool, a, b store.Entry) int {
 	if a.IsDir != b.IsDir {
 		if a.IsDir {
 			return -1
@@ -103,7 +69,7 @@ func (l *listState) compare(a, b store.Entry) int {
 		return 1
 	}
 	var c int
-	switch l.sortBy {
+	switch by {
 	case sortSize:
 		c = cmp.Compare(a.Size, b.Size)
 	case sortModified:
@@ -111,7 +77,7 @@ func (l *listState) compare(a, b store.Entry) int {
 	default:
 		c = compareFold(a.Name, b.Name)
 	}
-	if l.reverse {
+	if reverse {
 		return -c
 	}
 	return c
@@ -132,25 +98,9 @@ func compareFold(a, b string) int {
 	return cmp.Compare(len(a), len(b))
 }
 
-func (l *listState) clamp() { l.Clamp(len(l.vis)) }
-
-func (l *listState) current() (store.Entry, bool) {
-	if len(l.vis) == 0 {
-		return store.Entry{}, false
-	}
-	return l.all[l.vis[l.Cursor]], true
-}
-
-func (l *listState) selectKey(key string) {
-	l.Select(len(l.vis), func(i int) bool { return l.all[l.vis[i]].Key == key })
-}
-
-// scroll keeps the cursor visible with a small scrolloff.
-func (l *listState) scroll(height int) { l.Scroll(len(l.vis), height) }
-
 func (l *listState) totalSize() (n int64) {
-	for _, i := range l.vis {
-		n += l.all[i].Size
+	for _, i := range l.Vis {
+		n += l.All[i].Size
 	}
 	return
 }

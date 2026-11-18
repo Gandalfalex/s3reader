@@ -3,13 +3,12 @@ package ui
 import (
 	"fmt"
 	"strconv"
-	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"s3reader/internal/store"
+
+	tk "github.com/Gandalfalex/tuikit"
 )
 
 func (m *model) View() tea.View {
@@ -20,40 +19,32 @@ func (m *model) View() tea.View {
 }
 
 func (m *model) render() string {
-	if m.w == 0 {
+	if m.W == 0 {
 		return ""
 	}
-	var b strings.Builder
-	b.WriteString(m.titleBar())
-	b.WriteByte('\n')
-
-	switch m.top() {
+	var body string
+	switch m.Stack.Top() {
 	case scrInfo, scrObject, scrHelp, scrErrors:
-		b.WriteString(m.vp.View())
-		b.WriteByte('\n')
+		body = m.vp.View()
 	default:
-		b.WriteString(m.renderList())
+		body = m.renderList()
 	}
-	body := b.String()
-	if popup := m.renderPopup(); m.mode == inputCommand && len(popup) > 0 {
-		// draw the completion menu over the bottom of the body, like vim's pum
-		lines := strings.Split(strings.TrimSuffix(body, "\n"), "\n")
-		k := min(len(popup), len(lines)-1) // keep the title bar
-		copy(lines[len(lines)-k:], popup[len(popup)-k:])
-		body = strings.Join(lines, "\n") + "\n"
+	var popup []string
+	if m.prompt.Kind == inputCommand {
+		popup = tk.Popup(theme, &m.cmd.Line, m.W, maxPopup)
 	}
-	return body + m.statusBar() + "\n" + m.hints()
+	return tk.Frame(m.titleBar(), tk.Overlay(body, popup, false), m.statusBar(), m.hints())
 }
 
 // titleBar shows where we are; a path that does not fit is cut from the
 // left, since its deepest part is the one that matters.
 func (m *model) titleBar() string {
-	parts := []string{sTitle.Render("s3reader")}
+	var before, after []string
 	if m.profile.Name != "" {
-		parts = append(parts, sCrumb.Render(m.profile.Name))
+		before = append(before, sCrumb.Render(m.profile.Name))
 	}
 	path := ""
-	switch m.top() {
+	switch m.Stack.Top() {
 	case scrObjects, scrSearch:
 		path = "s3://" + m.bucket + "/" + m.prefix
 	case scrObject:
@@ -61,91 +52,54 @@ func (m *model) titleBar() string {
 	case scrInfo:
 		path = "s3://" + m.info.Name
 	}
-	at := len(parts)
-	if path != "" {
-		parts = append(parts, sCrumb.Render(path))
-	}
-	switch m.top() {
+	switch m.Stack.Top() {
 	case scrInfo:
-		parts = append(parts, sMuted.Render("bucket info"))
+		after = append(after, sMuted.Render("bucket info"))
 	case scrHelp:
-		parts = append(parts, sMuted.Render("help"))
+		after = append(after, sMuted.Render("help"))
 	case scrErrors:
-		parts = append(parts, sErr.Render("error log"))
+		after = append(after, sErr.Render("error log"))
 	case scrSearch:
-		parts = append(parts, sWarn.Render("search: "+m.searchQuery.Raw))
+		after = append(after, sWarn.Render("search: "+m.searchQuery.Raw))
 	}
-	sep := sMuted.Render(" › ")
-	s := strings.Join(parts, sep)
-	if over := lipgloss.Width(s) - m.w; over > 0 && path != "" {
-		parts[at] = sCrumb.Render(truncLeft(path, max(8, lipgloss.Width(path)-over)))
-		s = strings.Join(parts, sep)
-	}
-	return ansi.Truncate(s, m.w, "…")
+	return tk.TitleBarPath(theme, m.W, "s3reader", before, path, after)
 }
 
 func (m *model) renderList() string {
 	l := m.list()
 	h := m.listHeight()
-	l.scroll(h)
-
-	var b strings.Builder
-	nameW := m.w - 2
+	nameW := m.W - 2
 	var header string
-	switch m.top() {
+	switch m.Stack.Top() {
 	case scrProfiles:
-		header = pad("PROFILE", 24) + pad("ENDPOINT / REGION", 40) + "BUCKET"
+		header = tk.Pad("PROFILE", 24) + tk.Pad("ENDPOINT / REGION", 40) + "BUCKET"
 	case scrBuckets:
-		nameW = m.w - 2 - 20
-		header = pad("BUCKET", nameW) + "CREATED"
+		nameW = m.W - 2 - 20
+		header = tk.Pad("BUCKET", nameW) + "CREATED"
 	default:
-		nameW = m.w - 2 - 11 - 18 - 14
+		nameW = m.W - 2 - 11 - 18 - 14
 		if nameW < 20 {
-			nameW = m.w - 2 - 11
+			nameW = m.W - 2 - 11
 		}
-		header = pad("NAME", nameW) + padLeft("SIZE", 10) + " "
-		if nameW == m.w-2-11 {
+		header = tk.Pad("NAME", nameW) + tk.PadLeft("SIZE", 10) + " "
+		if nameW == m.W-2-11 {
 			break
 		}
-		header += " " + pad("MODIFIED", 17) + pad("CLASS", 14)
+		header += " " + tk.Pad("MODIFIED", 17) + tk.Pad("CLASS", 14)
 	}
-	b.WriteString(sHeader.Render(ansi.Truncate("  "+header, m.w, "")))
-	b.WriteByte('\n')
-
-	lines := 0
-	if len(l.vis) == 0 {
-		msg := "  (empty)"
-		if !l.filter.Empty() {
-			msg = "  no matches for filter: " + l.filter.Raw
-		}
-		if m.loading {
-			msg = "  " + m.spin.View() + " " + m.what
-		}
-		b.WriteString(sMuted.Render(msg))
-		b.WriteByte('\n')
-		lines++
+	empty := ""
+	if m.Ops.Loading() {
+		empty = m.Ops.Spinner()
 	}
-	for i := l.Top; i < len(l.vis) && i < l.Top+h; i++ {
-		e := l.all[l.vis[i]]
-		row := m.renderRow(e, nameW)
-		if i == l.Cursor {
-			row = sSel.Render(pad("▌ "+ansi.Strip(row), m.w))
-		} else {
-			row = "  " + row
-		}
-		b.WriteString(ansi.Truncate(row, m.w, ""))
-		b.WriteByte('\n')
-		lines++
-	}
-	for ; lines < h; lines++ {
-		b.WriteString(sMuted.Render("~"))
-		b.WriteByte('\n')
-	}
-	return b.String()
+	return l.View(theme, m.W, h, tk.ListView[store.Entry]{
+		Header: header,
+		Row:    func(e store.Entry, _ int) string { return m.renderRow(e, nameW) },
+		Empty:  empty,
+	})
 }
 
 func (m *model) renderRow(e store.Entry, nameW int) string {
-	switch m.top() {
+	switch m.Stack.Top() {
 	case scrProfiles:
 		i, _ := strconv.Atoi(e.Key)
 		p := m.settings.Profiles[i]
@@ -160,95 +114,58 @@ func (m *model) renderRow(e store.Entry, nameW int) string {
 		if bucket == "" {
 			bucket = sMuted.Render("(all)")
 		}
-		return pad(e.Name, 24) + sMuted.Render(pad(ep, 40)) + bucket
+		return tk.Pad(e.Name, 24) + sMuted.Render(tk.Pad(ep, 40)) + bucket
 	case scrBuckets:
-		return pad(truncMid(e.Name, nameW), nameW) + sMuted.Render(fmtTime(e.Modified))
+		return tk.Pad(tk.TruncMid(e.Name, nameW), nameW) + sMuted.Render(fmtTime(e.Modified))
 	}
-	name := truncMid(e.Name, nameW)
+	name := tk.TruncMid(e.Name, nameW)
 	if e.IsDir {
-		return pad(sDir.Render(name), nameW)
+		return tk.Pad(sDir.Render(name), nameW)
 	}
-	row := pad(name, nameW) + padLeft(humanSize(e.Size), 10) + " "
-	if nameW == m.w-2-11 {
+	row := tk.Pad(name, nameW) + tk.PadLeft(tk.FmtSize(e.Size), 10) + " "
+	if nameW == m.W-2-11 {
 		return row
 	}
 	cls := e.Class
 	if cls == "" {
 		cls = "STANDARD"
 	}
-	return row + " " + sMuted.Render(pad(fmtTime(e.Modified), 17)+pad(cls, 14))
+	return row + " " + sMuted.Render(tk.Pad(fmtTime(e.Modified), 17)+tk.Pad(cls, 14))
 }
 
 func (m *model) statusBar() string {
-	modeName, modeColor := "NORMAL", cAccent
-	switch m.mode {
-	case inputFilter:
-		modeName, modeColor = "FILTER", cOK
-	case inputSearch:
-		modeName, modeColor = "SEARCH", cWarn
-	case inputCommand:
-		modeName, modeColor = "COMMAND", cDir
+	if m.prompt.Active() {
+		return tk.PromptBar(theme, m.W, m.prompt.Mode, m.prompt.Input)
 	}
-	if m.mode != inputNone {
-		left := sMode.Background(modeColor).Render(modeName) + " "
-		return left + ansi.Truncate(m.input.View(), m.w-lipgloss.Width(left), "")
-	}
-
-	left := sMode.Background(modeColor).Render(modeName)
 	var mid []string
-	if m.loading {
-		mid = append(mid, m.spin.View()+" "+m.what)
-	}
 	if l := m.list(); l != nil {
-		pos := 0
-		if len(l.vis) > 0 {
-			pos = l.Cursor + 1
-		}
-		mid = append(mid, fmt.Sprintf("%d/%d", pos, len(l.vis)))
-		if len(l.vis) != len(l.all) {
-			mid = append(mid, fmt.Sprintf("(of %d)", len(l.all)))
-		}
-		if m.top() == scrObjects || m.top() == scrSearch {
-			mid = append(mid, humanSize(l.totalSize()))
+		mid = append(mid, l.Position()...)
+		if m.Stack.Top() == scrObjects || m.Stack.Top() == scrSearch {
+			mid = append(mid, tk.FmtSize(l.totalSize()))
 			arrow := "↑"
 			if l.reverse {
 				arrow = "↓"
 			}
 			mid = append(mid, "sort:"+sortNames[l.sortBy]+arrow)
 		}
-		if !l.filter.Empty() {
-			mid = append(mid, sOK.Render("/"+l.filter.Raw))
+		if l.Filter != "" {
+			mid = append(mid, sOK.Render("/"+l.Filter))
 		}
-		if m.top() == scrSearch && !m.searchDone {
+		if m.Stack.Top() == scrSearch && !m.searchDone {
 			mid = append(mid, fmt.Sprintf("scanned %d", m.searchScanned))
 		}
 	} else {
-		mid = append(mid, fmt.Sprintf("%3.0f%%", m.vp.ScrollPercent()*100))
+		mid = append(mid, m.vp.Percent())
 	}
-	if n := len(m.errs); n > 0 && m.top() != scrErrors {
-		mid = append(mid, sErr.Render(fmt.Sprintf("E:%d", n)))
-	}
-	if p := m.keys.Partial(); p != "" {
-		mid = append(mid, sWarn.Render(p))
-	}
-	if m.status != "" {
-		st := m.status
-		if m.statusErr {
-			st = sErr.Render(st)
-		}
-		mid = append(mid, st)
-	}
-	line := left + " " + strings.Join(mid, sMuted.Render(" │ "))
-	line = ansi.Truncate(line, m.w, "…")
-	return sBar.Render(pad(line, m.w))
+	return tk.StatusBar(theme, m.W, tk.ModeNormal, m.StatusParts(mid, m.Stack.Top() == scrErrors))
 }
 
 func (m *model) hints() string {
-	if m.mode == inputCommand {
-		return sMuted.Render(ansi.Truncate(" tab/S-tab complete · ↑↓ history · enter run · esc cancel", m.w, "…"))
+	if m.prompt.Kind == inputCommand {
+		return tk.HintBar(theme, m.W, "tab/S-tab complete · ↑↓ history · enter run · esc cancel")
 	}
 	var h string
-	switch m.top() {
+	switch m.Stack.Top() {
 	case scrProfiles:
 		h = "j/k move · l/enter select · / filter · : command · :help · q quit"
 	case scrBuckets:
@@ -266,5 +183,5 @@ func (m *model) hints() string {
 	case scrErrors:
 		h = "j/k scroll · G newest · q back · full log: " + m.logPath
 	}
-	return sMuted.Render(ansi.Truncate(" "+h, m.w, "…"))
+	return tk.HintBar(theme, m.W, h)
 }

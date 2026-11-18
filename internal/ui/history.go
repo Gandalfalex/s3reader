@@ -54,7 +54,7 @@ func (m *model) resetHistory() {
 // leave remembers the cursor of the dir being left; with jump it also adds
 // the dir to the jump list, dropping forward history like vim.
 func (m *model) leave(jump bool) {
-	if e, ok := m.objects.current(); ok {
+	if e, ok := m.objects.Current(); ok {
 		m.cursors[m.here()] = e.Key
 	}
 	if !jump {
@@ -85,20 +85,20 @@ func (m *model) jump(dir int) tea.Cmd {
 		if dir < 0 {
 			msg = "at oldest jump"
 		}
-		m.setStatus(msg, false)
+		m.SetStatus(msg, false)
 		return nil
 	}
 	m.leave(false)
 	m.jumpIdx = next
 	to := m.jumps[next]
 	if to.bucket != m.bucket {
-		if !m.popTo(scrBuckets) {
-			m.stack = m.stack[:1]
+		if !m.Stack.PopTo(scrBuckets) {
+			m.Stack.Reset()
 		}
 		return m.fetchBucket(to.bucket, to.prefix)
 	}
-	if !m.popTo(scrObjects) {
-		m.push(scrObjects)
+	if !m.Stack.PopTo(scrObjects) {
+		m.Stack.Push(scrObjects)
 	}
 	return m.listDir(to.prefix, "")
 }

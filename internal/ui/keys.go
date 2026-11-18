@@ -1,11 +1,10 @@
 package ui
 
 import (
-	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
+	tk "github.com/Gandalfalex/tuikit"
 
 	"github.com/Gandalfalex/vim-kit/keys"
-	"github.com/Gandalfalex/vim-kit/motion"
 	"s3reader/internal/query"
 )
 
@@ -14,19 +13,18 @@ func (m *model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if k == "ctrl+c" {
 		return m, tea.Quit
 	}
-	if m.mode == inputCommand {
+	if m.prompt.Kind == inputCommand {
 		return m.handleCommandKey(msg)
 	}
-	if m.mode != inputNone {
+	if m.prompt.Kind != inputNone {
 		return m.handleInput(msg)
 	}
-	m.setStatus("", false) // messages last until the next key
+	m.SetStatus("", false) // messages last until the next key
 
 	// esc cancels in-flight work first
-	if k == "esc" && m.loading && m.cancel != nil {
-		m.cancelOp()
-		m.keys.Reset()
-		m.setStatus("cancelled", false)
+	if k == "esc" && m.cancelOp() {
+		m.Keys.Reset()
+		m.SetStatus("cancelled", false)
 		return m, nil
 	}
 
@@ -35,12 +33,12 @@ func (m *model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if pager {
 		km = pagerKeymap
 	}
-	ev, ok := m.keys.Feed(km, k)
+	ev, ok := m.Keys.Feed(km, k)
 	if !ok {
 		return m, nil // count digit or pending g/z
 	}
 	if ev.Action != actQuit {
-		m.quitArmed = false
+		m.Disarm()
 	}
 	if ev.Seq == ":" {
 		return m, m.openCommandLine()
@@ -54,9 +52,9 @@ func (m *model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m *model) handleListKey(ev keys.Event) (tea.Model, tea.Cmd) {
 	l := m.list()
 	h := m.listHeight()
-	defer l.scroll(h)
+	defer l.Scroll(h)
 
-	if l.Apply(ev, len(l.vis), h) {
+	if l.Apply(ev, h) {
 		return m, nil
 	}
 	if fn, ok := listActions[ev.Action]; ok {
@@ -69,20 +67,18 @@ func (m *model) handleInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	l := m.list()
 	switch msg.String() {
 	case "esc":
-		if m.mode == inputFilter && l != nil {
+		if m.prompt.Kind == inputFilter && l != nil {
 			q, _ := query.Parse(m.prevFilter)
-			l.setFilter(q)
+			l.setQuery(q)
 		}
-		m.mode = inputNone
-		m.input.Blur()
+		m.prompt.Close()
 		return m, nil
 	case "enter":
-		mode := m.mode
-		m.mode = inputNone
-		m.input.Blur()
-		q, err := query.Parse(m.input.Value())
+		mode := m.prompt.Kind
+		m.prompt.Close()
+		q, err := query.Parse(m.prompt.Input.Value())
 		if err != nil {
-			m.setStatus(err.Error(), true)
+			m.SetStatus(err.Error(), true)
 			return m, nil
 		}
 		if mode == inputSearch {
@@ -94,14 +90,14 @@ func (m *model) handleInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	var cmd tea.Cmd
-	m.input, cmd = m.input.Update(msg)
-	if m.mode == inputFilter && l != nil {
-		q, err := query.Parse(m.input.Value())
+	m.prompt.Input, cmd = m.prompt.Input.Update(msg)
+	if m.prompt.Kind == inputFilter && l != nil {
+		q, err := query.Parse(m.prompt.Input.Value())
 		if err == nil {
-			l.setFilter(q)
-			m.setStatus("", false)
+			l.setQuery(q)
+			m.SetStatus("", false)
 		} else {
-			m.setStatus(err.Error(), true)
+			m.SetStatus(err.Error(), true)
 		}
 	}
 	return m, cmd
@@ -110,29 +106,25 @@ func (m *model) handleInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // openSearchInput starts the "?" recursive search prompt for the current dir.
 func (m *model) openSearchInput() tea.Cmd {
 	m.popToList()
-	if m.top() != scrObjects && m.top() != scrSearch {
-		m.setStatus("open a bucket to search", true)
+	if m.Stack.Top() != scrObjects && m.Stack.Top() != scrSearch {
+		m.SetStatus("open a bucket to search", true)
 		return nil
 	}
-	m.mode = inputSearch
-	m.input.Prompt = "?"
-	m.input.Placeholder = "search s3://" + m.bucket + "/" + m.prefix + " recursively (same syntax as /)"
-	m.input.SetValue("")
-	return m.input.Focus()
+	return m.prompt.Open(inputSearch, tk.ModeSearch, "?", "search s3://"+m.bucket+"/"+m.prefix+" recursively (same syntax as /)", "")
 }
 
 // runSearch opens (or replaces) the search results screen.
 func (m *model) runSearch(q query.Query) tea.Cmd {
-	if m.top() == scrSearch {
-		m.pop()
+	if m.Stack.Top() == scrSearch {
+		m.Stack.Pop()
 		m.prefix = m.searchRoot
 	}
-	m.push(scrSearch)
+	m.Stack.Push(scrSearch)
 	return m.startSearch(q)
 }
 
 func (m *model) handlePagerKey(ev keys.Event) (tea.Model, tea.Cmd) {
-	if motion.ApplyPager(pager{&m.vp}, ev) {
+	if m.vp.Apply(ev) {
 		return m, nil
 	}
 	if fn, ok := pagerActions[ev.Action]; ok {
@@ -140,9 +132,3 @@ func (m *model) handlePagerKey(ev keys.Event) (tea.Model, tea.Cmd) {
 	}
 	return m, nil
 }
-
-// pager adapts the bubbles viewport to motion.Pager.
-type pager struct{ *viewport.Model }
-
-func (p pager) Top()    { p.GotoTop() }
-func (p pager) Bottom() { p.GotoBottom() }
