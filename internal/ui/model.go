@@ -52,6 +52,8 @@ type model struct {
 	jumps   []dirKey          // ctrl+o / ctrl+i
 	jumpIdx int
 
+	dl *download // transfer in flight, nil when idle
+
 	logPath string
 }
 

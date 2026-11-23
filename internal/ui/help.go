@@ -33,6 +33,7 @@ const helpText = `  NAVIGATION
     c                   (info) scan whole bucket: count, size, classes, ext
     C                   (info) scan only the current prefix
     y / Y               yank s3:// URI / raw key to clipboard
+    d                   download object to current dir (:w <path>, :w! overwrites)
     E                   error log (this session; full log in log file)
 
   QUERY SYNTAX (filter and search; terms are ANDed)

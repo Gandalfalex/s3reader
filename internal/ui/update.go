@@ -136,6 +136,9 @@ func (m *model) update(msg tea.Msg) tea.Cmd {
 		m.openPage(scrObject, false)
 		return nil
 
+	case downloadMsg:
+		return m.onDownload(msg)
+
 	case tea.KeyPressMsg:
 		_, cmd := m.handleKey(msg)
 		return cmd

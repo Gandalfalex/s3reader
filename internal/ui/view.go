@@ -157,6 +157,9 @@ func (m *model) statusBar() string {
 	} else {
 		mid = append(mid, m.vp.Percent())
 	}
+	if s := m.downloadStatus(); s != "" {
+		mid = append(mid, sOK.Render(s))
+	}
 	return tk.StatusBar(theme, m.W, tk.ModeNormal, m.StatusParts(mid, m.Stack.Top() == scrErrors))
 }
 

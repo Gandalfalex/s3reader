@@ -58,26 +58,28 @@ const (
 	actStatsPrefix keys.Action = "stats_prefix"
 	actOlder       keys.Action = "jump_back"
 	actNewer       keys.Action = "jump_forward"
+	actDownload    keys.Action = "download"
 )
 
 var listKeymap = keys.MustKeymap(motion.VerticalBindings(), keys.Bindings{
-	actQuit:    {"q"},
-	actErrors:  {"E"},
-	actSearch:  {"?", "s"},
-	actFilter:  {"/"},
-	actEsc:     {"esc"},
-	actSort:    {"o"},
-	actReverse: {"O"},
-	actOpen:    {"enter", "l", "right"},
-	actBack:    {"h", "left", "backspace", "-"},
-	actInfo:    {"i", "gi"},
-	actRoot:    {"gr"},
-	actReload:  {"r", "ctrl+r"},
-	actYank:    {"y"},
-	actYankKey: {"Y"},
-	actReveal:  {"D"},
-	actOlder:   {"ctrl+o"},
-	actNewer:   {"ctrl+i", "tab"}, // most terminals send tab for ctrl+i
+	actQuit:     {"q"},
+	actErrors:   {"E"},
+	actSearch:   {"?", "s"},
+	actFilter:   {"/"},
+	actEsc:      {"esc"},
+	actSort:     {"o"},
+	actReverse:  {"O"},
+	actOpen:     {"enter", "l", "right"},
+	actBack:     {"h", "left", "backspace", "-"},
+	actInfo:     {"i", "gi"},
+	actRoot:     {"gr"},
+	actReload:   {"r", "ctrl+r"},
+	actYank:     {"y"},
+	actYankKey:  {"Y"},
+	actReveal:   {"D"},
+	actDownload: {"d"},
+	actOlder:    {"ctrl+o"},
+	actNewer:    {"ctrl+i", "tab"}, // most terminals send tab for ctrl+i
 })
 
 var pagerKeymap = keys.MustKeymap(tk.PagerMotions(), keys.Bindings{
@@ -88,6 +90,7 @@ var pagerKeymap = keys.MustKeymap(tk.PagerMotions(), keys.Bindings{
 	actReload:      {"r"},
 	actErrors:      {"E"},
 	actSearch:      {"?"},
+	actDownload:    {"d"},
 })
 
 // quitList quits at the top level; deeper in a bucket q must be pressed twice
@@ -131,10 +134,11 @@ var listActions = map[keys.Action]keyFn{
 		}
 		return m, nil
 	},
-	actReload: nav((*model).reload),
-	actOlder:  func(m *model, _ keyCtx) (tea.Model, tea.Cmd) { return m, m.jump(-1) },
-	actNewer:  func(m *model, _ keyCtx) (tea.Model, tea.Cmd) { return m, m.jump(+1) },
-	actYank:   cmd((*model).cmdYank),
+	actReload:   nav((*model).reload),
+	actOlder:    func(m *model, _ keyCtx) (tea.Model, tea.Cmd) { return m, m.jump(-1) },
+	actNewer:    func(m *model, _ keyCtx) (tea.Model, tea.Cmd) { return m, m.jump(+1) },
+	actYank:     cmd((*model).cmdYank),
+	actDownload: func(m *model, _ keyCtx) (tea.Model, tea.Cmd) { return m, m.cmdDownload("", false) },
 	actYankKey: func(m *model, c keyCtx) (tea.Model, tea.Cmd) {
 		if e, ok := c.l.Current(); ok {
 			return m, tk.YankValue(e.Key)
@@ -168,7 +172,8 @@ var pagerActions = map[keys.Action]keyFn{
 		}
 		return m, nil
 	},
-	actYank: cmd((*model).cmdYank),
+	actYank:     cmd((*model).cmdYank),
+	actDownload: func(m *model, _ keyCtx) (tea.Model, tea.Cmd) { return m, m.cmdDownload("", false) },
 	actReload: func(m *model, _ keyCtx) (tea.Model, tea.Cmd) {
 		if m.Stack.Top() == scrObject && m.detail != nil {
 			m.Stack.Pop()
