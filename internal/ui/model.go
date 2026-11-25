@@ -52,7 +52,8 @@ type model struct {
 	jumps   []dirKey          // ctrl+o / ctrl+i
 	jumpIdx int
 
-	dl *download // transfer in flight, nil when idle
+	dl    *download // transfer in flight, nil when idle
+	watch *watch    // :watch in progress, nil when off
 
 	vis visualState // v / V row selection
 

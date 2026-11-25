@@ -37,6 +37,8 @@ func (m *model) pageContent() (string, bool) {
 		return helpPage(), false
 	case scrErrors:
 		return m.Errors.Render(theme), true
+	case scrWatch:
+		return m.renderWatch(), false
 	}
 	return "", false
 }
@@ -138,6 +140,7 @@ func (m *model) renderInfo() string {
 	}
 
 	b.WriteString("\n" + sSection.Render(" CONTENTS") + "\n")
+	b.WriteString(row("Open uploads", infoUploads(bi)))
 	st := m.stats
 	if st == nil {
 		b.WriteString(sMuted.Render("  press c to scan all objects (count, size, classes, extensions)") + "\n")
@@ -174,6 +177,25 @@ func (m *model) renderInfo() string {
 		}
 	}
 	return b.String()
+}
+
+// infoUploads describes unfinished multipart uploads on the info page.
+func infoUploads(bi *store.BucketInfo) string {
+	switch {
+	case bi.UploadsNote != "":
+		return bi.UploadsNote
+	case bi.Uploads == 0:
+		return "none"
+	}
+	n := tk.FmtInt(int64(bi.Uploads))
+	if bi.UploadsMore {
+		n += "+"
+	}
+	s := n + " unfinished multipart"
+	if time.Since(bi.UploadsOldest) > store.StaleUpload {
+		s = sWarn.Render(s)
+	}
+	return s + sMuted.Render("  oldest started "+ago(bi.UploadsOldest)+" · :watch for details")
 }
 
 func statLine(v [2]int64, total int64) string {

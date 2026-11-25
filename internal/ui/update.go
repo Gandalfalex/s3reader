@@ -136,6 +136,9 @@ func (m *model) update(msg tea.Msg) tea.Cmd {
 		m.openPage(scrObject, false)
 		return nil
 
+	case watchMsg:
+		return m.onWatch(msg)
+
 	case downloadMsg:
 		return m.onDownload(msg)
 

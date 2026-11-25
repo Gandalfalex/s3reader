@@ -131,6 +131,9 @@ func (m *model) cmdCancel() tea.Cmd {
 		m.dl.cancel()
 		return nil
 	}
+	if m.stopWatch() {
+		return nil
+	}
 	if m.cancelOp() {
 		m.SetStatus("cancelled", false)
 		return nil

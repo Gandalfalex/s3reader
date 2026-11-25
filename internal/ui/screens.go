@@ -11,6 +11,7 @@ const (
 	scrObject
 	scrHelp
 	scrErrors
+	scrWatch
 )
 
 type inputMode int

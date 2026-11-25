@@ -41,6 +41,10 @@ type BucketInfo struct {
 	PublicBlock   string
 	PolicyState   string
 	Owner         string
+	Uploads       int  // unfinished multipart uploads (first page)
+	UploadsMore   bool // more than one page of them
+	UploadsOldest time.Time
+	UploadsNote   string // set when they could not be listed
 	Errors        []string
 }
 
@@ -155,6 +159,11 @@ func FetchBucketInfo(ctx context.Context, c *s3.Client, p config.Profile, bucket
 		if bi.Owner == "" {
 			bi.Owner = aws.ToString(acl.Owner.ID)
 		}
+	}
+	if n, more, oldest, err := CountUploads(ctx, c, bucket); err != nil {
+		bi.UploadsNote = note("multipart uploads", err)
+	} else {
+		bi.Uploads, bi.UploadsMore, bi.UploadsOldest = n, more, oldest
 	}
 	return bi
 }

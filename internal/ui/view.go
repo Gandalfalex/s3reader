@@ -24,7 +24,7 @@ func (m *model) render() string {
 	}
 	var body string
 	switch m.Stack.Top() {
-	case scrInfo, scrObject, scrHelp, scrErrors:
+	case scrInfo, scrObject, scrHelp, scrErrors, scrWatch:
 		body = m.vp.View()
 	default:
 		body = m.renderList()
@@ -51,12 +51,16 @@ func (m *model) titleBar() string {
 		path = "s3://" + m.bucket + "/" + m.detail.Key
 	case scrInfo:
 		path = "s3://" + m.info.Name
+	case scrWatch:
+		path = "s3://" + m.watch.bucket + "/" + m.watch.prefix
 	}
 	switch m.Stack.Top() {
 	case scrInfo:
 		after = append(after, sMuted.Render("bucket info"))
 	case scrHelp:
 		after = append(after, sMuted.Render("help"))
+	case scrWatch:
+		after = append(after, sWarn.Render("watch"))
 	case scrErrors:
 		after = append(after, sErr.Render("error log"))
 	case scrSearch:
@@ -169,6 +173,9 @@ func (m *model) statusBar() string {
 	if s := m.downloadStatus(); s != "" {
 		mid = append(mid, sOK.Render(s))
 	}
+	if s := m.watchStatus(); s != "" {
+		mid = append(mid, sWarn.Render(s))
+	}
 	mode := tk.ModeNormal
 	if m.visualOn() {
 		mode = tk.ModeVLine
@@ -199,6 +206,8 @@ func (m *model) hints() string {
 		h = "j/k ^d/^u scroll · gg/G · y yank uri · r reload · h back"
 	case scrHelp:
 		h = "j/k scroll · q back"
+	case scrWatch:
+		h = "j/k scroll · h back (keeps watching, :watch reopens) · :watch off stops"
 	case scrErrors:
 		h = "j/k scroll · G newest · q back · full log: " + m.logPath
 	}
