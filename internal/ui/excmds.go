@@ -193,13 +193,8 @@ func (m *model) cmdYank() tea.Cmd {
 		}
 	}
 	if l := m.list(); l != nil {
-		if e, ok := l.Current(); ok {
-			switch m.Stack.Top() {
-			case scrBuckets:
-				return tk.YankValue("s3://" + e.Key)
-			case scrObjects, scrSearch:
-				return tk.YankValue("s3://" + m.bucket + "/" + e.Key)
-			}
+		if e, ok := l.Current(); ok && m.Stack.Top() != scrProfiles {
+			return tk.YankValue(m.uriOf(e))
 		}
 	}
 	if m.bucket != "" {

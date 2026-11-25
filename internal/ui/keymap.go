@@ -59,6 +59,7 @@ const (
 	actOlder       keys.Action = "jump_back"
 	actNewer       keys.Action = "jump_forward"
 	actDownload    keys.Action = "download"
+	actVisual      keys.Action = "visual"
 )
 
 var listKeymap = keys.MustKeymap(motion.VerticalBindings(), keys.Bindings{
@@ -78,6 +79,7 @@ var listKeymap = keys.MustKeymap(motion.VerticalBindings(), keys.Bindings{
 	actYankKey:  {"Y"},
 	actReveal:   {"D"},
 	actDownload: {"d"},
+	actVisual:   {"v", "V"},
 	actOlder:    {"ctrl+o"},
 	actNewer:    {"ctrl+i", "tab"}, // most terminals send tab for ctrl+i
 })
@@ -141,10 +143,11 @@ var listActions = map[keys.Action]keyFn{
 	actDownload: func(m *model, _ keyCtx) (tea.Model, tea.Cmd) { return m, m.cmdDownload("", false) },
 	actYankKey: func(m *model, c keyCtx) (tea.Model, tea.Cmd) {
 		if e, ok := c.l.Current(); ok {
-			return m, tk.YankValue(e.Key)
+			return m, tk.YankValue(m.keyOf(e))
 		}
 		return m, nil
 	},
+	actVisual: do(func(m *model, c keyCtx) { m.startVisual(c.l) }),
 	actReveal: func(m *model, c keyCtx) (tea.Model, tea.Cmd) {
 		// reveal search result in its directory
 		if m.Stack.Top() == scrSearch {

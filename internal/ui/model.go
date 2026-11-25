@@ -54,6 +54,8 @@ type model struct {
 
 	dl *download // transfer in flight, nil when idle
 
+	vis visualState // v / V row selection
+
 	logPath string
 }
 

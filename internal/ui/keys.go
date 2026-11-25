@@ -41,6 +41,7 @@ func (m *model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.Disarm()
 	}
 	if ev.Seq == ":" {
+		m.endVisual()
 		return m, m.openCommandLine()
 	}
 	if pager {
@@ -56,6 +57,11 @@ func (m *model) handleListKey(ev keys.Event) (tea.Model, tea.Cmd) {
 
 	if l.Apply(ev, h) {
 		return m, nil
+	}
+	if m.visualOn() {
+		if mm, cmd, ok := m.handleVisualKey(ev, l); ok {
+			return mm, cmd
+		}
 	}
 	if fn, ok := listActions[ev.Action]; ok {
 		return fn(m, keyCtx{Event: ev, l: l})

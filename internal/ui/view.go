@@ -91,10 +91,16 @@ func (m *model) renderList() string {
 	if m.Ops.Loading() {
 		empty = m.Ops.Spinner()
 	}
+	sel := m.visualSet(l)
 	return l.View(theme, m.W, h, tk.ListView[store.Entry]{
 		Header: header,
-		Row:    func(e store.Entry, _ int) string { return m.renderRow(e, nameW) },
-		Empty:  empty,
+		Row: func(e store.Entry, i int) string {
+			if sel[i] {
+				return visualRow(m.renderRow(e, nameW), m.W-2)
+			}
+			return m.renderRow(e, nameW)
+		},
+		Empty: empty,
 	})
 }
 
@@ -151,6 +157,9 @@ func (m *model) statusBar() string {
 		if l.Filter != "" {
 			mid = append(mid, sOK.Render("/"+l.Filter))
 		}
+		if m.visualOn() {
+			mid = append(mid, sWarn.Render(strconv.Itoa(m.visualCount())+" selected"))
+		}
 		if m.Stack.Top() == scrSearch && !m.searchDone {
 			mid = append(mid, fmt.Sprintf("scanned %d", m.searchScanned))
 		}
@@ -160,12 +169,19 @@ func (m *model) statusBar() string {
 	if s := m.downloadStatus(); s != "" {
 		mid = append(mid, sOK.Render(s))
 	}
-	return tk.StatusBar(theme, m.W, tk.ModeNormal, m.StatusParts(mid, m.Stack.Top() == scrErrors))
+	mode := tk.ModeNormal
+	if m.visualOn() {
+		mode = tk.ModeVLine
+	}
+	return tk.StatusBar(theme, m.W, mode, m.StatusParts(mid, m.Stack.Top() == scrErrors))
 }
 
 func (m *model) hints() string {
 	if m.prompt.Kind == inputCommand {
 		return tk.HintBar(theme, m.W, "tab/S-tab complete · ↑↓ history · enter run · esc cancel")
+	}
+	if m.visualOn() {
+		return tk.HintBar(theme, m.W, "j/k gg/G extend · y yank s3:// URIs · Y yank keys · esc/v cancel")
 	}
 	var h string
 	switch m.Stack.Top() {

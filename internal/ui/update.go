@@ -163,6 +163,7 @@ func (m *model) applyDir(prefix string, entries []store.Entry, sel string) {
 // showEntries fills the object list with the cursor on sel, or where it was
 // when this dir was last left.
 func (m *model) showEntries(entries []store.Entry, sel string) {
+	m.endVisual()
 	if sel == "" {
 		sel = m.cursors[m.here()]
 	}
